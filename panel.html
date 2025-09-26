@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>MS Side Chat</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body class="dark-theme">
+
+  <!-- 헤더: 타이틀 + 상태 + 툴바 -->
+  <header class="header">
+    <div class="left">
+      <div class="title">MS Chat</div>
+      <div class="status" id="status">대기중</div>
+    </div>
+    <div class="toolbar">
+      <button id="goHomeBtn" title="홈페이지 이동">🏠︎</button>
+      <button id="toggleThemeBtn" title="테마 변경">◐</button>
+      <button id="resetChatBtn" title="채팅 재시작">⟳</button>
+      <button id="historyBtn" title="히스토리 보기">☰</button>
+    </div>
+  </header>
+
+  <!-- 채팅 메시지 영역 -->
+  <main class="chat">
+    <div id="messages" class="messages"></div>
+  </main>
+
+  <!-- 입력창 -->
+  <div class="input-bar">
+    <div class="input-wrapper">
+      <textarea id="prompt" placeholder="메시지를 입력하세요..." rows="1"></textarea>
+      <button id="uploadPdfBtn" title="pdf 첨부">+</button>
+      <input type="file" id="pdfInput" accept=".pdf" style="display:none;" />
+    </div>
+  </div>
+
+  <!-- 히스토리 팝업 -->
+  <div id="historyPopup" class="history-popup" style="display: none;">
+    <div class="popup-header">☰ 이전 대화</div>
+    <div id="historyList" class="history-list"></div>
+    <!-- 🗑️ 삭제 버튼들 -->
+    <div class="history-actions">
+      <button id="deleteSelectedBtn">선택 삭제</button>
+      <button id="deleteAllBtn">전체 삭제</button>
+    </div>  
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>
