@@ -115,24 +115,116 @@ class JiraClient:
             "project",
             "issuetype",
         ]
-        payload = {
-            "jql": self._build_search_jql(project_key, keyword, jql),
-            "maxResults": min(limit, 100),
-            "fields": fields,
-        }
+        jql_query = self._build_search_jql(project_key, keyword, jql)
+        max_results = min(limit, 100)
+        payload_candidates: List[Dict[str, Any]] = [
+            {
+                "queries": [
+                    {
+                        "jql": {"query": jql_query},
+                        "maxResults": max_results,
+                        "startAt": 0,
+                        "fields": {
+                            "include": fields,
+                            "exclude": [],
+                        },
+                    }
+                ]
+            },
+            {
+                "queries": [
+                    {
+                        "query": jql_query,
+                        "maxResults": max_results,
+                        "startAt": 0,
+                    }
+                ],
+                "fields": {
+                    "include": fields,
+                    "exclude": [],
+                },
+            },
+            {
+                "jql": {"query": jql_query},
+                "maxResults": max_results,
+                "startAt": 0,
+                "fields": {
+                    "include": fields,
+                    "exclude": [],
+                },
+            },
+            {
+                "jql": jql_query,
+                "maxResults": max_results,
+                "startAt": 0,
+                "fields": {
+                    "include": fields,
+                    "exclude": [],
+                },
+            },
+            {
+                "queries": [
+                    {
+                        "jql": jql_query,
+                        "maxResults": max_results,
+                        "startAt": 0,
+                    }
+                ],
+                "fields": fields,
+            },
+            {
+                "jql": jql_query,
+                "maxResults": max_results,
+                "startAt": 0,
+                "fields": fields,
+            },
+        ]
 
-        try:
-            data = self._request("POST", "/rest/api/3/search", json=payload)
-        except JiraClientError as exc:
-            if exc.status_code == 405:
+        last_error: Optional[JiraClientError] = None
+        data: Optional[Dict[str, Any]] = None
+        for candidate in payload_candidates:
+            try:
+                response_data = self._request("POST", "/rest/api/3/search/jql", json=candidate)
+                if not isinstance(response_data, dict):
+                    raise JiraClientError(
+                        "Jira 검색 API가 JSON이 아닌 응답을 반환했습니다.",
+                        payload=response_data,
+                    )
+                data = _select_first_search_result(response_data)
+                break
+            except JiraClientError as exc:
+                if exc.status_code == 404:
+                    raise JiraClientError(
+                        "Jira 검색 API 엔드포인트가 비활성화되어 있습니다. 최신 Jira Search API를 활성화하거나 CHANGE-2046 가이드를 확인하세요.",
+                        exc.status_code,
+                        payload=exc.payload,
+                    ) from exc
+                if exc.status_code in {400, 415} and "Invalid request payload" in str(exc):
+                    last_error = exc
+                    continue
+                raise
+        else:
+            # POST가 모두 실패하면 GET 요청으로 최후 시도
+            try:
                 params = {
-                    "jql": payload["jql"],
-                    "maxResults": payload["maxResults"],
+                    "jql": jql_query,
+                    "maxResults": max_results,
+                    "startAt": 0,
                     "fields": ",".join(fields),
                 }
-                data = self._request("GET", "/rest/api/3/search", params=params)
-            else:
-                raise
+                response_data = self._request("GET", "/rest/api/3/search/jql", params=params)
+                if not isinstance(response_data, dict):
+                    raise JiraClientError(
+                        "Jira 검색 API가 JSON이 아닌 응답을 반환했습니다.",
+                        payload=response_data,
+                    )
+                data = _select_first_search_result(response_data)
+            except JiraClientError:
+                data = None
+            if data is None:
+                if last_error:
+                    raise last_error
+                raise JiraClientError("Jira 검색 요청이 반복적으로 실패했습니다.")
 
         issues_payload = data.get("issues", []) if isinstance(data, dict) else []
         return [self._parse_issue(raw) for raw in issues_payload]
@@ -320,6 +412,29 @@ class JiraClient:
 
 # ----------------------------------------------------------------------
 # ADF helpers
+
+
+def _select_first_search_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize Jira search responses across legacy/new API shapes."""
+    if not isinstance(payload, dict):
+        return {}
+
+    if "issues" in payload and isinstance(payload["issues"], list):
+        return payload
+
+    results = payload.get("results")
+    if isinstance(results, list):
+        for item in results:
+            if isinstance(item, dict) and "issues" in item:
+                return item
+
+    values = payload.get("queries") or payload.get("jqlResults")
+    if isinstance(values, list):
+        for item in values:
+            if isinstance(item, dict) and "issues" in item:
+                return item
+
+    return payload
 
 
 def to_adf(text: str) -> Dict[str, Any]:

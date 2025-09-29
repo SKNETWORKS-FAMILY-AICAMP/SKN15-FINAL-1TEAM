@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -169,6 +170,7 @@ def build_app(services: Services):
             missing.append("요약")
         if missing:
             text = "생성을 위해 " + ", ".join(missing) + " 값을 알려주세요."
+            text += "\n예시)\n- 프로젝트: KAN (Jira 프로젝트 키)\n- 이슈 유형: 버그\n- 요약: 로그인 버튼 클릭 시 페이지 로드 안됨\n- 설명(선택): 크롬에서 로그인 버튼을 눌러도 페이지가 이동하지 않습니다"
             return _reply(state, text, pending={"intent": "create", "slots": slots})
 
         normalized_project = project.strip().upper()
@@ -455,10 +457,9 @@ def _validate_project_and_issue_type(
     projects = meta.get("projects") if isinstance(meta, dict) else None
     if not projects:
         return ValidationResult(
-            can_proceed=True,
+            can_proceed=False,
             message=(
-                "프로젝트 채널 이름을 확인할 수 없어 Jira 응답 기준으로 계속 시도합니다. "
-                "필요하면 프로젝트 채널 이름 또는 권한을 확인해주세요."
+                "프로젝트 키를 확인할 수 없습니다. Jira 프로젝트 설정에서 대문자 키를 다시 알려주세요."
             ),
             available_types=[],
             project_id=None,
@@ -471,10 +472,9 @@ def _validate_project_and_issue_type(
             break
     if not project_meta:
         return ValidationResult(
-            can_proceed=True,
+            can_proceed=False,
             message=(
-                "프로젝트 채널 이름 정보를 확인할 수 없어 Jira 응답 기준으로 계속 시도합니다. "
-                "필요하면 프로젝트 채널 이름 또는 권한을 확인해주세요."
+                f"프로젝트 키 '{project_key}' 정보를 찾지 못했습니다. 사용 중인 Jira 프로젝트 키를 정확히 입력해주세요."
             ),
             available_types=[],
             project_id=None,
@@ -527,7 +527,39 @@ def _normalize_slots(slots: Dict[str, Any]) -> Dict[str, Any]:
         value = normalized.get(key)
         if isinstance(value, list):
             normalized[key] = " ".join(str(item) for item in value)
+    project_value = normalized.get("project")
+    if isinstance(project_value, str) and project_value.strip():
+        normalized["project"] = _canonical_project_key(project_value)
     return normalized
+
+
+_PROJECT_SUFFIXES = ("프로젝트", "project")
+
+
+def _canonical_project_key(raw: str) -> str:
+    text = raw.strip().strip("'\"`")
+    if not text:
+        return text
+
+    lowered = text.casefold()
+    for suffix in _PROJECT_SUFFIXES:
+        if lowered.endswith(suffix):
+            text = text[: -len(suffix)].strip()
+            lowered = text.casefold()
+            break
+
+    text = re.sub(r"[(){}\[\]]", " ", text)
+    tokens = [token for token in re.split(r"[\s·,;:/\\|]+", text) if token]
+    for token in tokens:
+        cleaned = re.sub(r"[^A-Za-z0-9]", "", token)
+        if cleaned and cleaned[0].isalpha():
+            return cleaned.upper()
+
+    match = re.search(r"[A-Za-z][A-Za-z0-9]+", text)
+    if match:
+        return match.group(0).upper()
+
+    return raw.strip().upper()
 
 
 def _faiss_topk(
