@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}TEST — PDF 업로드{% endblock %}
+
+{% block content %}
+<section class="dl-hero">
+  <p class="eyebrow">TEAM HINTON</p>
+  <h1 class="headline">PDF를 <span class="accent">업로드</span> 해보세요</h1>
+  <p class="subhead">버튼 없이 드래그&드롭 또는 영역 클릭으로 선택 가능합니다.</p>
+</section>
+
+<section class="container">
+  <!-- 업로드 카드 (버튼 없음) -->
+  <article class="card upload-card">
+    <form id="upload-form" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label class="upload-drop" id="dropzone">
+        <div class="up-icon">⇪</div>
+        <div class="up-title">PDF를 여기로 끌어다 놓으세요</div>
+        <div class="up-hint">.pdf만 허용 · 놓는 즉시 업로드</div>
+        <input id="file-input" name="file" type="file" accept="application/pdf,.pdf" hidden>
+      </label>
+
+      <div class="upload-name" id="file-name">선택된 파일 없음</div>
+
+      <div class="upload-actions">
+        <!-- 제출 버튼 제거 / 메인으로만 남김 -->
+        <a href="/" class="btn">메인으로</a>
+      </div>
+    </form>
+  </article>
+
+  {% if saved_name %}
+  <!-- 업로드 완료 안내(미리보기/텍스트 없음) -->
+  <article class="panel" style="margin-top:12px;">
+    <h3 class="panel-title">파일 정보</h3>
+    <p><span class="tag">파일명</span> {{ saved_name }}</p>
+    {% if size_kb %}<p><span class="tag">크기</span> {{ size_kb }} KB</p>{% endif %}
+    {% if file_url %}
+      <p class="desc-sm">필요하면 <a href="{{ file_url }}" target="_blank" rel="noreferrer">새 창에서 열기</a></p>
+    {% endif %}
+  </article>
+  {% endif %}
+
+  {% if error or error_extract %}
+  <article class="panel" style="margin-top:12px; border-color:#fecaca; background:#fff1f2;">
+    <h3 class="panel-title">알림</h3>
+    {% if error %}<p style="color:#991b1b">{{ error }}</p>{% endif %}
+    {% if error_extract %}<p style="color:#991b1b">{{ error_extract }}</p>{% endif %}
+  </article>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('upload-form');
+  const input = document.getElementById('file-input');
+  const nameBox = document.getElementById('file-name');
+  const drop = document.getElementById('dropzone');
+
+  let submitting = false;
+
+  function autoSubmit() {
+    if (submitting) return;
+    if (!input.files || !input.files.length) return;
+    submitting = true;
+    nameBox.textContent = `${input.files[0].name} — 업로드 중...`;
+    if (form.requestSubmit) form.requestSubmit();
+    else form.submit();
+  }
+
+  // 파일 선택 시 자동 업로드
+  input.addEventListener('change', () => {
+    nameBox.textContent = (input.files && input.files[0]) ? input.files[0].name : '선택된 파일 없음';
+    autoSubmit();
+  });
+
+  // 드래그&드롭
+  ['dragenter','dragover','dragleave','drop'].forEach(evt => {
+    drop.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); }, false);
+  });
+  drop.addEventListener('dragover', () => drop.classList.add('is-over'));
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+  drop.addEventListener('drop', e => {
+    drop.classList.remove('is-over');
+    const files = e.dataTransfer.files;
+    if (files && files.length) {
+      input.files = files;
+      nameBox.textContent = files[0].name;
+      autoSubmit();
+    }
+  });
+
+  // 클릭으로 선택도 허용(정말 드래그만 원하면 아래 줄 삭제)
+  drop.addEventListener('click', () => input.click());
+</script>
+{% endblock %}

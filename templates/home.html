@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Team Hinton{% endblock %}
+
+{% block content %}
+<section class="landing">
+  <div class="landing-inner">
+    <p class="eyebrow">TEAM HINTON</p>
+    <h1 class="headline">
+      업무효율을 <span class="accent"> 더 빠르게</span> HINTON과 함께하세요
+    </h1>
+    <p class="subhead">
+      가벼운 설치로 시작하고, 바로 테스트까지.
+      불필요한 단계는 걷어낸 심플한 사용자 흐름을 제공합니다.
+    </p>
+
+    <!-- 히어로 CTA: 3개 버튼 -->
+    <div class="cta-row">
+      <a class="btn primary lg" href="{% url 'download' %}">
+        <span class="badge">1</span> Download Page
+      </a>
+      <a class="btn ghost lg" href="{% url 'calendar' %}">
+        <span class="badge ghost">2</span> Calendar
+      </a>
+      <a class="btn lg" href="{% url 'test' %}">
+        <span class="badge ghost">3</span> PDF TEST
+      </a>
+    </div>
+
+    <!-- 미리보기 카드 -->
+    <div class="preview-card">
+      <div class="preview-hero">
+        <a class="pill active" href="{% url 'download' %}">
+          <span class="pill-badge">1</span> 다운로드
+        </a>
+        <a class="pill" href="{% url 'test' %}">
+          <span class="pill-badge">2</span> TEST
+        </a>
+        <a class="pill" href="{% url 'calendar' %}">
+          <span class="pill-badge">3</span> 캘린더
+        </a>
+      </div>
+      <div class="preview-body">
+        <div class="shot-placeholder">
+          스크린샷/미리보기 이미지를 여기에 넣으세요
+        </div>
+      </div>
+    </div>
+
+    <!-- 보조 링크 -->
+    <div class="link-row">
+      <a href="#" target="_blank" rel="noreferrer">PDF 매뉴얼</a>
+      <span>·</span>
+      <a href="#" target="_blank" rel="noreferrer">챗봇 검색 데모</a>
+      <span>·</span>
+      <a href="#" target="_blank" rel="noreferrer">업데이트 로그</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

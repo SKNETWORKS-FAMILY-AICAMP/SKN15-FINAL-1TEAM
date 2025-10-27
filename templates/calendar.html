@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}캘린더{% endblock %}
+
+{% block extra_head %}
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/main.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<section class="dl-hero">
+  <p class="eyebrow">TEAM HINTON</p>
+  <h1 class="headline"><span class="accent">통합 캘린더</span> — 원하는 것만 골라서 보세요</h1>
+  <p class="subhead">지금은 체크박스 필터만 동작합니다. 이후 Notion / Google Calendar / Google Drive / Jira API를 연결해 이벤트를 주입하세요.</p>
+</section>
+
+<section class="container">
+  <!-- 소스 선택 바 -->
+  <div class="source-bar card" style="padding:10px; margin-bottom:10px; display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+    <label class="src-item"><input type="checkbox" class="src-toggle" value="notion" checked> Notion</label>
+    <label class="src-item"><input type="checkbox" class="src-toggle" value="gcal" checked> Google Calendar</label>
+    <label class="src-item"><input type="checkbox" class="src-toggle" value="gdrive" checked> Google Drive</label>
+    <label class="src-item"><input type="checkbox" class="src-toggle" value="jira" checked> Jira</label>
+  </div>
+
+  <!-- 보기 탭 -->
+  <div class="seg" style="margin-bottom:10px;">
+    <button class="seg-btn active" data-view="dayGridMonth">월간</button>
+    <button class="seg-btn" data-view="timeGridWeek">주간</button>
+    <button class="seg-btn" data-view="timeGridDay">일간</button>
+  </div>
+
+  <!-- 캘린더 -->
+  <div id="calendar" class="fc-wrap card" style="padding:8px;"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/locales-all.global.min.js"></script>
+  <script>
+    // —— 소스 필터 상태
+    const enabledSources = new Set(['notion','gcal','gdrive','jira']);
+
+    // —— 저장/불러오기 (데모용)
+    const LS_KEY = "fc:events";
+    function loadEvents() {
+      const raw = localStorage.getItem(LS_KEY);
+      try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+    }
+    function saveEvents(evts) {
+      localStorage.setItem(LS_KEY, JSON.stringify(evts));
+    }
+
+    // —— 초기 더미(처음 1회만)
+    (function seedOnce(){
+      if (loadEvents().length) return;
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = String(today.getMonth()+1).padStart(2,'0');
+      const d = String(today.getDate()).padStart(2,'0');
+      const base = `${y}-${m}-${d}`;
+      saveEvents([
+        { id:'n1', title:'Notion: 문서정리',  start: base, allDay:true, source:'notion' },
+        { id:'g1', title:'GCal: 팀미팅',     start: base, allDay:true, source:'gcal'   },
+        { id:'d1', title:'Drive: 파일검토',  start: base, allDay:true, source:'gdrive' },
+        { id:'j1', title:'Jira: 이슈확인',   start: base, allDay:true, source:'jira'   },
+      ]);
+    })();
+
+    let calendar;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+        initialView: 'dayGridMonth',
+        locale: 'ko',
+        height: 'auto',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: '' },
+        buttonText: { today:'오늘' },
+        events: loadEvents(),
+
+        eventDidMount(info){
+          const src = info.event.extendedProps?.source || 'unknown';
+          if (!enabledSources.has(src)) info.el.style.display = 'none';
+        },
+
+        dateClick(info){
+          const text = prompt('할 일을 입력하세요 (데모: 소스는 notion으로 추가)');
+          if (!text) return;
+          const newEvt = { id:String(Date.now()), title:text, start:info.dateStr, allDay:true, source:'notion' };
+          calendar.addEvent(newEvt);
+          const all = calendar.getEvents().map(e => ({
+            id:e.id, title:e.title,
+            start:e.start ? e.start.toISOString() : null,
+            end:e.end ? e.end.toISOString() : null,
+            allDay:e.allDay,
+            source:e.extendedProps?.source || 'unknown'
+          }));
+          saveEvents(all);
+          calendar.rerenderEvents();
+        },
+
+        eventClick(info){
+          if (!confirm(`삭제할까요?\n\n${info.event.title}`)) return;
+          info.event.remove();
+          const all = calendar.getEvents().map(e => ({
+            id:e.id, title:e.title,
+            start:e.start ? e.start.toISOString() : null,
+            end:e.end ? e.end.toISOString() : null,
+            allDay:e.allDay,
+            source:e.extendedProps?.source || 'unknown'
+          }));
+          saveEvents(all);
+        },
+
+        eventChange(){
+          const all = calendar.getEvents().map(e => ({
+            id:e.id, title:e.title,
+            start:e.start ? e.start.toISOString() : null,
+            end:e.end ? e.end.toISOString() : null,
+            allDay:e.allDay,
+            source:e.extendedProps?.source || 'unknown'
+          }));
+          saveEvents(all);
+        }
+      });
+
+      calendar.render();
+
+      // 보기 전환(월/주/일)
+      document.querySelectorAll('.seg-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          document.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          calendar.changeView(btn.dataset.view);
+        });
+      });
+
+      // 소스 필터 체크박스
+      document.querySelectorAll('.src-toggle').forEach(chk=>{
+        chk.addEventListener('change', ()=>{
+          if (chk.checked) enabledSources.add(chk.value);
+          else enabledSources.delete(chk.value);
+          calendar.rerenderEvents();
+        });
+      });
+    });
+  </script>
+{% endblock %}

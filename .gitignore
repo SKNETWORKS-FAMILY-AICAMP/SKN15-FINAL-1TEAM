@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+
+# Django
+*.sqlite3
+staticfiles/
+media/
+.env
+
+# venv
+venv/
+.venv/
+
+# OS
+.DS_Store
+
+# Node (있다면)
+node_modules/
+dist/
+
+# Keys
+*.pem

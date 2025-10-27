@@ -1,0 +1,439 @@
+/* =========================================================
+   Team Hinton – Global CSS
+   - 공통 베이스 + 메인(랜딩) + 다운로드 페이지 스타일
+   ========================================================= */
+
+/* ---------- Reset / Base ---------- */
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+  color:#0f172a; background:#ffffff;
+}
+a { color:#1d4ed8; text-decoration:none; }
+a:hover { text-decoration:underline; }
+
+/* CSS 변수 (컬러 시스템) */
+:root{
+  --ink:#0f172a;
+  --muted:#64748b;
+  --line:#e2e8f0;
+  --brand:#1d4ed8;
+  --bg:#ffffff;
+  --bg-soft:#f8fafc;
+}
+
+/* ---------- Layout ---------- */
+.container { max-width:1080px; margin:0 auto; padding:16px; }
+
+.topbar { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid #e5e7eb; }
+.topbar .brand { font-weight:700; }
+.topbar .nav a { margin-left:16px; color:#374151; }
+.topbar .nav a:hover { color:#111827; }
+
+/* 상단을 좌측 로고 한 줄만 쓰는 미니멀 버전 */
+.topbar.minimal { background:#fff; border-bottom:0; padding:12px 0; }
+.logo-only {
+  text-decoration:none; font-size:20px; font-weight:800; letter-spacing:-0.02em;
+  color:#1d4ed8; display:inline-block;
+}
+.topbar .nav { display:none !important; }
+
+/* ---------- Common UI ---------- */
+.panel {
+  background:#fff; border:1px solid var(--line); border-radius:12px; padding:24px; margin-top:16px;
+}
+.footer { margin-top:24px; border-top:1px solid #e5e7eb; padding:16px 0; color:#6b7280; font-size:14px; }
+
+/* Buttons */
+.btn {
+  display:inline-block; border:1px solid #d1d5db; background:#fff; color:#111827;
+  padding:10px 16px; border-radius:10px; cursor:pointer; text-decoration:none; line-height:1;
+}
+.btn:hover { background:#f9fafb; }
+.btn.primary { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+.btn.primary:hover { background:#1e40af; }
+.btn.lg { padding:12px 18px; font-size:15px; border-radius:12px; }
+.btn.outline { background:#fff; border-color:#cbd5e1; color:#1f2937; }
+.btn.outline:hover { background:#f8fafc; }
+
+/* Pills / Badges */
+.badge, .pill-badge{
+  display:inline-grid; place-items:center; width:22px; height:22px; border-radius:999px;
+  background:var(--brand); color:#fff; font-size:12px; font-weight:700;
+}
+.badge.ghost{ background:#e2e8f0; color:#0f172a; }
+
+/* Tags / Notes */
+.tag{
+  display:inline-block; background:#e2e8f0; color:#0f172a; font-size:12px;
+  padding:2px 8px; border-radius:999px; margin-right:6px;
+}
+.note.warn{
+  margin-top:14px; font-size:13px; color:#0f172a;
+  background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:10px 12px;
+}
+
+/* =========================================================
+   Home / Landing
+   ========================================================= */
+.landing{ padding:56px 0 40px; }
+.landing-inner{ max-width:960px; margin:0 auto; text-align:center; padding:0 16px; }
+
+.eyebrow{
+  display:inline-block; font-size:13px; letter-spacing:.08em;
+  color:var(--muted); text-transform:uppercase; margin-bottom:12px;
+}
+.headline{
+  margin:0; font-size:40px; line-height:1.15; letter-spacing:-.02em;
+  color:var(--ink); font-weight:800;
+}
+@media (max-width:640px){ .headline{ font-size:32px; } }
+.accent{
+  background:linear-gradient(90deg,#4f46e5,#06b6d4);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.subhead{ margin:14px 0 22px; color:var(--muted); font-size:16px; }
+
+.cta-row{ display:flex; gap:12px; justify-content:center; margin:6px 0 8px; flex-wrap:wrap; }
+
+.link-row{
+  display:flex; gap:10px; justify-content:center; color:var(--muted); font-size:14px;
+}
+.link-row a{ color:var(--brand); }
+.link-row a:hover{ text-decoration:underline; }
+
+/* (선택) 중앙 로고 전용 섹션 */
+.landing-center{
+  display:flex; justify-content:center; align-items:center; height:80vh; text-align:center;
+}
+.brand-title{
+  font-size:52px; font-weight:800; color:#1d4ed8; letter-spacing:-0.02em; line-height:1.1;
+}
+@media (max-width:640px){ .brand-title{ font-size:36px; } }
+
+/* (선택) 3열 레이아웃/프리뷰 – 사용 시에만 DOM에 추가 */
+.grid-3 { display:grid; gap:16px; margin-top:8px; grid-template-columns: 1fr 1.6fr 1fr; }
+@media (max-width:1024px){ .grid-3{ grid-template-columns:1fr; } }
+
+.left-notes .bullet-list { margin:8px 0 12px; padding-left:16px; }
+.left-notes .bullet-list li { list-style:disc; margin:6px 0; color:#374151; }
+.note { font-size:14px; color:#2563eb; background:#eff6ff; border:1px dashed #bfdbfe; padding:10px 12px; border-radius:10px; }
+
+.center-preview .pill-row { display:flex; gap:8px; margin-bottom:12px; }
+.pill{
+  display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid #e5e7eb;
+  border-radius:999px; background:#fff; color:#334155; font-weight:600; font-size:14px;
+}
+.pill.active{ background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+.pill.active .pill-badge{ background:#fff; color:#1d4ed8; }
+
+.preview-card{
+  margin:8px auto 20px; border:1px solid var(--line); border-radius:16px;
+  box-shadow:0 8px 24px rgba(15,23,42,.06); overflow:hidden; background:#fff; max-width:920px; text-align:left;
+}
+.preview-body{ padding:20px; background: radial-gradient(900px 220px at 80% 0%, #eef2ff 0%, transparent 60%), #fff; }
+.shot-placeholder{
+  height:360px; display:grid; place-items:center; color:var(--muted);
+  border:1px dashed #cbd5e1; border-radius:12px; background:#f8fafc;
+}
+
+/* =========================================================
+   Download Page (Clean)
+   ========================================================= */
+.dl-hero{ text-align:center; padding:36px 0 20px; }
+.dl-wrap{ display:grid; gap:16px; grid-template-columns: 1.4fr 1fr; }
+@media (max-width:1024px){ .dl-wrap{ grid-template-columns:1fr; } }
+
+.card{ border:1px solid var(--line); background:#fff; border-radius:16px;
+  box-shadow:0 8px 24px rgba(15,23,42,.06); }
+
+.dl-main{ padding:18px; }
+.dl-head{ display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+.dl-icon{
+  width:44px; height:44px; border-radius:12px; background:#eef2ff;
+  display:grid; place-items:center; font-size:22px; color:#1d4ed8;
+}
+.dl-title{ font-weight:800; font-size:18px; letter-spacing:-.01em; }
+.dl-meta-s{ color:#64748b; font-size:13px; margin-top:2px; }
+
+.dl-body .w100{ width:100%; }
+.dl-info{ margin:14px 0 0; padding:0; list-style:none; display:grid; gap:6px; color:#334155; }
+
+/* 사이드 패널 */
+.dl-side .panel{ margin:0 0 12px; }
+.panel-title{ margin:0 0 8px; font-weight:800; }
+.rl-list{ margin:0; padding-left:18px; }
+.rl-list li{ margin:6px 0; color:#374151; }
+
+.guide{ margin:0; padding-left:18px; color:#374151; }
+.kbd{
+  display:inline-block; background:#f1f5f9; border:1px solid #e2e8f0; border-bottom-width:2px;
+  padding:1px 6px; border-radius:6px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+}
+.faq summary{ cursor:pointer; font-weight:600; }
+.faq p{ margin:8px 0 0; color:#475569; font-size:14px; }
+
+/* =========================================================
+   끝
+   ========================================================= */
+/* ===== Upload (TEST) ===== */
+.upload-card{ padding:18px; }
+.upload-drop{
+  border:2px dashed var(--line); border-radius:16px; padding:28px;
+  display:grid; place-items:center; text-align:center; background:#f8fafc;
+  transition:border-color .2s, background .2s, box-shadow .2s;
+}
+.upload-drop.is-over{
+  border-color:#93c5fd; background:#eff6ff; box-shadow:0 8px 24px rgba(59,130,246,.15);
+}
+.up-icon{
+  width:48px; height:48px; border-radius:12px; display:grid; place-items:center;
+  background:#eef2ff; color:#1d4ed8; font-size:22px; margin-bottom:10px;
+}
+.up-title{ font-weight:800; color:#0f172a; margin-bottom:4px; }
+.up-hint{ color:#64748b; font-size:13px; }
+.upload-name{
+  margin-top:10px; color:#334155; font-size:14px; text-align:center;
+}
+.upload-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; }
+
+.upload-result{ margin-top:16px; padding:16px; }
+
+/* ===== Upload/PDF viewer ===== */
+.upload-card{ padding:18px; }
+.upload-drop{
+  border:2px dashed var(--line); border-radius:16px; padding:28px;
+  display:grid; place-items:center; text-align:center; background:#f8fafc;
+  transition:border-color .2s, background .2s, box-shadow .2s;
+}
+.upload-drop.is-over{
+  border-color:#93c5fd; background:#eff6ff; box-shadow:0 8px 24px rgba(59,130,246,.15);
+}
+.up-icon{
+  width:48px; height:48px; border-radius:12px; display:grid; place-items:center;
+  background:#eef2ff; color:#1d4ed8; font-size:22px; margin-bottom:10px;
+}
+.up-title{ font-weight:800; color:#0f172a; margin-bottom:4px; }
+.up-hint{ color:#64748b; font-size:13px; }
+.upload-name{ margin-top:10px; color:#334155; font-size:14px; text-align:center; }
+.upload-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; }
+
+.pdf-frame{
+  width:100%; height:640px; border:1px solid var(--line);
+  border-radius:12px; background:#fff;
+}
+
+.mono{
+  white-space:pre-wrap; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:13px; color:#1f2937; background:#f8fafc; border:1px solid var(--line);
+  border-radius:12px; padding:12px;
+}
+
+/* --- Topbar --- */
+.topbar{
+  position: sticky; top: 0; z-index: 50;
+  background:#fff; border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width: 1100px; margin:0 auto; padding:10px 16px;
+  display:flex; align-items:center; gap:16px;
+}
+.topbar .brand{
+  font-weight:800; letter-spacing:-.02em; text-decoration:none;
+  color:#1d4ed8; margin-right:auto;
+}
+.topbar .nav{ display:flex; gap:14px; }
+.topbar .nav a{
+  color:#334155; text-decoration:none; font-weight:600;
+}
+.topbar .nav a:hover{ color:#1d4ed8; }
+.topbar .auth{ margin-left:auto; display:flex; gap:8px; align-items:center; }
+.topbar .hello{ color:#64748b; font-size:13px; }
+.btn.sm{ padding:6px 10px; font-size:12px; border-radius:8px; }
+.btn.ghost{ background:#fff; border:1px solid var(--line); }
+
+
+
+/* ---------- Auth forms (login / signup) ---------- */
+/*
+.auth-card{
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.form-row{ margin-bottom: 14px; }
+.form-label{
+  display:block; font-weight:700; margin-bottom:6px; color:#0f172a;
+}
+.form-input{
+  width:100%; padding:10px 12px; border:1px solid var(--line);
+  border-radius:10px; font-size:14px; outline:none;
+}
+.form-input:focus{
+  border-color:#93c5fd; box-shadow:0 0 0 3px rgba(147,197,253,.35);
+}
+
+.input-group{ position:relative; }
+.input-group .eye{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  border:1px solid var(--line); background:#fff; padding:4px 8px;
+  border-radius:8px; font-size:12px; color:#475569; cursor:pointer;
+}
+.input-group .eye:hover{ background:#f8fafc; }
+
+.form-help{ margin-top:6px; font-size:12px; color:#64748b; }
+.form-error{
+  margin-top:8px; padding:8px 10px; border-radius:10px;
+  background:#fff1f2; border:1px solid #fecaca; color:#991b1b; font-size:13px;
+}
+
+.form-actions{
+  display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:8px;
+} */
+
+
+/* ===== Auth layout ===== */
+.auth-section{ padding: 34px 0 60px; }
+.auth-grid{
+  display:grid; gap:28px; align-items:center;
+  grid-template-columns: 1.1fr 1fr;
+}
+@media (max-width: 960px){
+  .auth-grid{ grid-template-columns: 1fr; }
+}
+
+/* left hero */
+.auth-hero .feature-list{
+  margin: 16px 0 0; padding-left: 18px; color:#374151;
+}
+.auth-hero .feature-list li{
+  margin: 6px 0;
+  list-style: none;
+  position: relative;
+  padding-left: 18px;
+}
+.auth-hero .feature-list li::before{
+  content: "✓";
+  position:absolute; left:0; top:0; color:#10b981; font-weight:700;
+}
+
+/* card */
+.auth-card{
+  padding:18px; border:1px solid var(--line); border-radius:16px;
+  background:#fff; box-shadow:0 12px 36px rgba(15,23,42,.06);
+}
+.auth-card-head{
+  display:flex; align-items:center; gap:12px; margin-bottom:12px;
+  border-bottom: 1px solid var(--line); padding-bottom:10px;
+}
+.auth-card-head .logo-dot{
+  width:36px; height:36px; border-radius:12px; display:grid; place-items:center;
+  background:#eef2ff; font-size:18px;
+}
+.auth-card-head .title h3{ margin:0; font-size:18px; font-weight:800; }
+.auth-card-head .title .muted{ margin:2px 0 0; color:#64748b; font-size:13px; }
+
+/* inputs */
+.form-row{ margin-bottom:14px; }
+.form-label{ display:block; font-weight:700; margin-bottom:6px; color:#0f172a; }
+.form-input{
+  width:100%; padding:12px 12px; border:1px solid var(--line);
+  border-radius:12px; font-size:14px; outline:none;
+}
+.form-input:focus{ border-color:#93c5fd; box-shadow:0 0 0 3px rgba(147,197,253,.35); }
+
+/* password eye button */
+.input-group{ position:relative; }
+.input-group .eye{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  border:1px solid var(--line); background:#fff;
+  padding:4px 8px; border-radius:8px; font-size:12px; color:#475569; cursor:pointer;
+}
+.input-group .eye:hover{ background:#f8fafc; }
+
+/* errors/help */
+.form-help{ margin-top:6px; font-size:12px; color:#64748b; }
+.form-error{
+  margin:10px 0; padding:8px 10px; border-radius:10px;
+  background:#fff1f2; border:1px solid #fecaca; color:#991b1b; font-size:13px;
+}
+
+/* actions */
+.form-actions{
+  display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:8px;
+}
+
+/* ===== Calendar ===== */
+.seg{ display:flex; gap:8px; justify-content:center; margin:10px 0 16px; }
+.seg-btn{
+  padding:8px 14px; border:1px solid var(--line); background:#fff; border-radius:10px; cursor:pointer;
+}
+.seg-btn.active{ background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+.month-nav{ display:flex; gap:10px; justify-content:center; align-items:center; margin:4px 0 10px; }
+.month-title{ font-weight:800; font-size:18px; min-width:110px; text-align:center; }
+
+.cal-wrap{
+  display:grid; gap:16px; grid-template-columns: 240px 1fr 240px; align-items:start;
+}
+@media (max-width: 1100px){ .cal-wrap{ grid-template-columns: 1fr; } }
+
+.cal-card{ padding:14px; }
+.grid-7{ display:grid; grid-template-columns: repeat(7, 1fr); gap:8px; }
+.grid-8{ display:grid; grid-template-columns: 120px repeat(7, 1fr); gap:8px; }
+.cal-head .dow, .week-head .dow{ text-align:center; font-weight:700; color:#334155; }
+.cal-head .sun, .week-head .sun{ color:#ef4444; }
+.cal-head .sat, .week-head .sat{ color:#2563eb; }
+
+.daycell{
+  min-height:120px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:8px;
+  display:flex; flex-direction:column;
+}
+.daycell.dim{ background:#f8fafc; }
+.daycell .date{ font-weight:800; color:#0f172a; }
+.task-list{ margin:6px 0 0; padding-left:16px; color:#374151; }
+.task-list.thin{ padding-left:14px; font-size:13px; }
+.task-input{
+  width:100%; border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:14px; margin-top:6px;
+}
+.task-input.small{ padding:6px 8px; font-size:12px; }
+
+.week-grid{ margin-top:6px; }
+.timecell{
+  background:#f8fafc; border:1px dashed var(--line); border-radius:12px; padding:8px; font-size:13px; color:#475569;
+  display:flex; align-items:center; justify-content:center;
+}
+.weekcell{
+  background:#fff; border:1px solid var(--line); border-radius:12px; padding:6px; min-height:74px; position:relative;
+}
+.weekcell .mini-date{ position:absolute; top:6px; right:8px; color:#94a3b8; font-size:12px; }
+
+.day-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.day-title{ font-weight:800; font-size:18px; }
+.task-list .mini{ border:1px solid var(--line); background:#fff; border-radius:8px; padding:2px 6px; font-size:12px; }
+.task-list .del{ margin-left:8px; cursor:pointer; }
+.memo{ width:100%; height:220px; border:1px solid var(--line); border-radius:12px; padding:10px; }
+.chk{ display:block; margin:6px 0; }
+.hidden{ display:none !important; }
+
+/* 소스 필터 & 탭 */
+.source-bar .src-item { display:inline-flex; gap:6px; align-items:center; }
+.seg { display:flex; gap:8px; justify-content:flex-start; }
+.seg-btn {
+  padding:8px 14px; border:1px solid var(--line); background:#fff;
+  border-radius:10px; cursor:pointer;
+}
+.seg-btn.active { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
+
+/* FullCalendar 카드 스타일 */
+.fc-wrap.card {
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 8px 24px rgba(15,23,42,.06);
+}
+
+/* 주말 색상 */
+.fc .fc-day-sun a { color:#ef4444; }
+.fc .fc-day-sat a { color:#2563eb; }

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}결과 확인{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1 class="title">결과 확인 화면</h1>
+  {% if status == "downloaded" %}
+    <p class="success">파일 다운로드 완료: report.csv</p>
+  {% else %}
+    <p class="desc">아직 다운로드 기록이 없어요. <a href="/download/">여기</a>에서 먼저 진행해 주세요.</p>
+  {% endif %}
+  <a class="btn" href="/">메인으로</a>
+</section>
+{% endblock %}

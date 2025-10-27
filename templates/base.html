@@ -1,0 +1,60 @@
+{% load static %}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Team Hinton{% endblock %}</title>
+
+  <!-- 공통 스타일 -->
+  <link rel="stylesheet" href="{% static 'css/base.css' %}">
+
+  <!-- 페이지별로 추가 CSS/JS(예: FullCalendar) 주입 -->
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+  <!-- 상단 네비게이션 -->
+  <header class="topbar">
+    <div class="container" style="display:flex; align-items:center; gap:16px; justify-content:space-between;">
+      <!-- 왼쪽 로고/브랜드 -->
+      <a href="/" class="brand" style="font-weight:800; letter-spacing:-.02em;">TEAM HINTON</a>
+
+      <!-- 가운데 메뉴 -->
+      <nav class="nav" style="display:flex; gap:14px; align-items:center;">
+        <a href="/">메인</a>
+        <a href="/download/">다운로드</a>
+        <a href="/test/">TEST</a>
+        <a href="/calendar/">캘린더</a>
+      </nav>
+
+      <!-- 오른쪽 인증 영역 -->
+      <div class="auth" style="display:flex; gap:10px; align-items:center;">
+        {% if request.user.is_authenticated %}
+          <span class="desc-sm" style="color:#64748b;">안녕하세요, {{ request.user.username }}님</span>
+          <a class="btn" href="/logout/">로그아웃</a>
+        {% else %}
+          <a class="btn ghost" href="/signup/">회원가입</a>
+          <a class="btn" href="/login/">로그인</a>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <!-- 메인 콘텐츠 -->
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- 푸터 -->
+  <footer class="footer">
+    <div class="container">© 2025 Team Hinton</div>
+  </footer>
+
+  <!-- 공통 스크립트 -->
+  <script src="{% static 'js/app.js' %}"></script>
+
+  <!-- 페이지별 스크립트 -->
+  {% block scripts %}{% endblock %}
+</body>
+</html>

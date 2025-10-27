@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}회원가입{% endblock %}
+
+{% block content %}
+<section class="auth-section">
+  <div class="container auth-grid">
+
+    <!-- 왼쪽: 소개/포인트 -->
+    <aside class="auth-hero">
+      <p class="eyebrow">TEAM HINTON</p>
+      <h1 class="headline">계정을 만들고 <span class="accent">시작</span>하세요</h1>
+      <p class="subhead">등록 후 확장프로그램 및 캘린더, 자동화를 이용할 수 있어요.</p>
+
+      <ul class="feature-list">
+        <li>원클릭 확장프로그램 설치</li>
+        <li>PDF 업로드/정리 자동화</li>
+        <li>캘린더/작업 흐름 통합</li>
+      </ul>
+    </aside>
+
+    <!-- 오른쪽: 카드형 폼 -->
+    <article class="card auth-card">
+      <header class="auth-card-head">
+        <div class="logo-dot">✨</div>
+        <div class="title">
+          <h3>회원가입</h3>
+          <p class="muted">몇 초 만에 시작할 수 있어요</p>
+        </div>
+      </header>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        {% if form.non_field_errors %}
+          <div class="form-error">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-row">
+          <label class="form-label" for="{{ form.username.id_for_label }}">아이디</label>
+          {{ form.username }}
+          {% if form.username.errors %}
+            <div class="form-error">{{ form.username.errors|join:", " }}</div>
+          {% endif %}
+          {% if form.username.help_text %}
+            <p class="form-help">{{ form.username.help_text }}</p>
+          {% endif %}
+        </div>
+
+        <div class="form-row">
+          <label class="form-label" for="{{ form.password1.id_for_label }}">비밀번호</label>
+          <div class="input-group">
+            {{ form.password1 }}
+            <button type="button" class="eye" data-target="{{ form.password1.id_for_label }}">보기</button>
+          </div>
+          {% if form.password1.errors %}
+            <div class="form-error">{{ form.password1.errors|join:", " }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-row">
+          <label class="form-label" for="{{ form.password2.id_for_label }}">비밀번호 확인</label>
+          <div class="input-group">
+            {{ form.password2 }}
+            <button type="button" class="eye" data-target="{{ form.password2.id_for_label }}">보기</button>
+          </div>
+          {% if form.password2.errors %}
+            <div class="form-error">{{ form.password2.errors|join:", " }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-actions">
+          <a class="btn ghost" href="{% url 'login' %}?next={{ next|urlencode }}">이미 계정이 있나요? 로그인</a>
+          <button class="btn primary">회원가입</button>
+        </div>
+      </form>
+    </article>
+
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.eye').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-target');
+      const input = document.getElementById(id);
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+      btn.textContent = input.type === 'password' ? '보기' : '숨김';
+    });
+  });
+</script>
+{% endblock %}
