@@ -1,1 +1,7 @@
-.env
+# 모든 파일 무시
+*
+
+# chrome_chatbot_src 폴더와 그 안의 모든 하위 폴더 및 파일 포함
+!chrome_chatbot_src/
+!chrome_chatbot_src/**/
+!chrome_chatbot_src/**/*.*

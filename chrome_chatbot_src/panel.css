@@ -42,8 +42,56 @@ html, body {
   background: var(--panel);
   border-bottom: 1px solid #1f2937;
 }
+.header .left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .title { font-weight: 600; }
 .status { color: var(--muted); font-size: 12px; }
+.mode-select {
+  margin-left: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #1f2937;
+  background: var(--panel);
+  color: var(--text);
+}
+.mode-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mode-banner {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  margin: 12px 0 6px;
+}
+.mode-banner::before,
+.mode-banner::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--muted);
+  opacity: 0.35;
+}
+.mode-banner span {
+  white-space: nowrap;
+  font-weight: 600;
+}
+body.light-theme .mode-banner {
+  color: #475569;
+}
+body.light-theme .mode-banner::before,
+body.light-theme .mode-banner::after {
+  background: #94a3b8;
+  opacity: 0.4;
+}
 
 /* 히스토리 팝업 */
 .history-popup {
@@ -139,6 +187,18 @@ html, body {
   align-self: flex-start;
   background: var(--bubble-bot);
   color: var(--text);
+}
+
+.msg.bot p,
+.msg.bot ul,
+.msg.bot ol {
+  margin: 0 0 6px;
+}
+
+.msg.bot p:last-child,
+.msg.bot ul:last-child,
+.msg.bot ol:last-child {
+  margin-bottom: 0;
 }
 
 /* "생성중..." 말풍선 스타일 */

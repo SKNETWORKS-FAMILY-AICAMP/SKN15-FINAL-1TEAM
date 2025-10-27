@@ -6,44 +6,39 @@
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body class="dark-theme">
-
-  <!-- 헤더: 타이틀 + 상태 + 툴바 -->
   <header class="header">
     <div class="left">
       <div class="title">MS Chat</div>
-      <div class="status" id="status">대기중</div>
+      <div class="status" id="status">Connecting...</div>
     </div>
     <div class="toolbar">
-      <button id="goHomeBtn" title="홈페이지 이동">🏠︎</button>
-      <button id="toggleThemeBtn" title="테마 변경">◐</button>
-      <button id="resetChatBtn" title="채팅 재시작">⟳</button>
-      <button id="historyBtn" title="히스토리 보기">☰</button>
+      <button id="webGuideButton" class="mode-button">웹 가이드 모드로 전환</button>
+      <button id="goHomeBtn" title="Open home page">🏠</button>
+      <button id="toggleThemeBtn" title="Toggle theme">🌓</button>
+      <button id="resetChatBtn" title="Start a new chat">↺</button>
+      <button id="historyBtn" title="Show history">🗂</button>
     </div>
   </header>
 
-  <!-- 채팅 메시지 영역 -->
   <main class="chat">
     <div id="messages" class="messages"></div>
   </main>
 
-  <!-- 입력창 -->
   <div class="input-bar">
     <div class="input-wrapper">
-      <textarea id="prompt" placeholder="메시지를 입력하세요..." rows="1"></textarea>
-      <button id="uploadPdfBtn" title="pdf 첨부">+</button>
+      <textarea id="prompt" placeholder="Type a message" rows="1"></textarea>
+      <button id="uploadPdfBtn" title="Attach PDF">+</button>
       <input type="file" id="pdfInput" accept=".pdf" style="display:none;" />
     </div>
   </div>
 
-  <!-- 히스토리 팝업 -->
-  <div id="historyPopup" class="history-popup" style="display: none;">
-    <div class="popup-header">☰ 이전 대화</div>
+  <div id="historyPopup" class="history-popup" style="display:none;">
+    <div class="popup-header">Saved conversations</div>
     <div id="historyList" class="history-list"></div>
-    <!-- 🗑️ 삭제 버튼들 -->
     <div class="history-actions">
-      <button id="deleteSelectedBtn">선택 삭제</button>
-      <button id="deleteAllBtn">전체 삭제</button>
-    </div>  
+      <button id="deleteSelectedBtn">Delete selected</button>
+      <button id="deleteAllBtn">Delete all</button>
+    </div>
   </div>
 
   <script src="panel.js"></script>
