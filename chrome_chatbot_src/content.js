@@ -157,29 +157,34 @@ function showGuides(overlays, opts = {}) {
     return;
   }
 
+  // Helper: choose best viewport rect among multiple coordinate conventions
   const dpr = Number(opts.dpr || window.devicePixelRatio || 1);
   const vw = window.innerWidth || document.documentElement.clientWidth || 0;
   const vh = window.innerHeight || document.documentElement.clientHeight || 0;
   const capturedSX = Number((opts && opts.scroll && typeof opts.scroll.x === 'number') ? opts.scroll.x : 0);
   const capturedSY = Number((opts && opts.scroll && typeof opts.scroll.y === 'number') ? opts.scroll.y : 0);
+  // Expose captured scroll for diagnostics
   try { window.__guideCapturedScroll = { x: capturedSX, y: capturedSY }; } catch {}
   const coordSpace = String(opts.coord_space || 'document').toLowerCase();
   const vp = { width: vw, height: vh };
   const shot = opts.screenshot_info || null;
   try { window.__lastScreenshotInfo = shot || null; } catch {}
+  // Use CURRENT viewport size for mapping because the screenshot background is rendered at 100% of current viewport
   const scaleX = (shot && shot.width) ? (shot.width / vp.width) : dpr;
   const scaleY = (shot && shot.height) ? (shot.height / vp.height) : dpr;
-
+  // Helper to get current scroll and delta vs captured
   const getScrollState = () => {
     const winX = window.scrollX || 0;
     const winY = window.scrollY || 0;
     const docX = (document.scrollingElement && document.scrollingElement.scrollLeft) || 0;
     const docY = (document.scrollingElement && document.scrollingElement.scrollTop) || 0;
+    // Use whichever reflects movement (inner scrolling containers on some sites bubble to document.scrollingElement)
     const curX = Math.max(winX, docX);
     const curY = Math.max(winY, docY);
     return { sx: curX, sy: curY, dx: curX - capturedSX, dy: curY - capturedSY };
   };
 
+  // Send initial scroll info to the server terminal
   try {
     chrome.runtime?.sendMessage?.({
       action: 'sendToServer',
@@ -187,7 +192,7 @@ function showGuides(overlays, opts = {}) {
       payload: {
         captured: { x: capturedSX, y: capturedSY },
         current: { x: window.scrollX || 0, y: window.scrollY || 0 },
-        delta: { dx: (window.scrollX || 0) - capturedSX, dy: (window.scrollY || 0) - capturedSY },
+        delta: { dx: (window.scrollX||0) - capturedSX, dy: (window.scrollY||0) - capturedSY },
         coord_space: coordSpace,
         screenshot_pixels: shot ? { width: shot.width, height: shot.height } : null,
         viewport_css: { width: vw, height: vh, dpr }
@@ -211,8 +216,11 @@ function showGuides(overlays, opts = {}) {
     const ow = Math.max(1, Math.round(Number(ov.width || 0)));
     const oh = Math.max(1, Math.round(Number(ov.height || 0)));
     const { sx, sy, dx, dy } = getScrollState();
-
+    // Deterministic mapping when coord_space is declared
     if (coordSpace === 'screenshot') {
+      // Two hypotheses:
+      // H1: model used full-page screenshot coords -> subtract captured scroll
+      // H2: model used viewport-cropped screenshot coords -> do not subtract
       const h1 = {
         l: Math.round(ox / scaleX - capturedSX - dx),
         t: Math.round(oy / scaleY - capturedSY - dy),
@@ -228,6 +236,7 @@ function showGuides(overlays, opts = {}) {
       const s1 = intersectionScore(h1.l, h1.t, h1.w, h1.h);
       const s2 = intersectionScore(h2.l, h2.t, h2.w, h2.h);
       const pick = s2 > s1 ? h2 : h1;
+      // clamp to viewport bounds
       pick.l = Math.max(-vw, Math.min(vw, pick.l));
       pick.t = Math.max(-vh, Math.min(vh, pick.t));
       pick.w = Math.max(1, Math.min(vw, pick.w));
@@ -238,12 +247,12 @@ function showGuides(overlays, opts = {}) {
     } else if (coordSpace === 'document') {
       return { l: Math.round(ox - sx), t: Math.round(oy - sy), w: ow, h: oh };
     }
-
+    // Fallback: try multiple interpretations and choose the best
     const cand = [
       { l: Math.round(ox - sx), t: Math.round(oy - sy), w: ow, h: oh },
-      { l: Math.round(ox), t: Math.round(oy), w: ow, h: oh },
+      { l: Math.round(ox),      t: Math.round(oy),      w: ow, h: oh },
       { l: Math.round(ox / dpr - sx), t: Math.round(oy / dpr - sy), w: Math.round(ow / dpr), h: Math.round(oh / dpr) },
-      { l: Math.round(ox / dpr), t: Math.round(oy / dpr), w: Math.round(ow / dpr), h: Math.round(oh / dpr) }
+      { l: Math.round(ox / dpr),      t: Math.round(oy / dpr),      w: Math.round(ow / dpr), h: Math.round(oh / dpr) }
     ];
     let best = cand[0], bestScore = intersectionScore(cand[0].l, cand[0].t, cand[0].w, cand[0].h);
     for (let i = 1; i < cand.length; i++) {
@@ -253,140 +262,46 @@ function showGuides(overlays, opts = {}) {
     return best;
   };
 
+  // Keep state for live recalc on scroll/resize
   window.__guideState = { overlays: JSON.parse(JSON.stringify(overlays)) };
   if (!Array.isArray(window.__guideExtraScrollTargets)) window.__guideExtraScrollTargets = [];
   window.__guideAnchors = [];
 
+  // If first target appears off-screen, scroll toward it
   const first = overlays[0];
   const firstView = bestViewportRect(first);
   const needScroll = (() => {
     try {
       return (firstView.t < 40) || (firstView.t + firstView.h > vh - 40);
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   })();
 
-  const isScrollable = (el) => {
-    if (!el) return false;
-    try {
-      const cs = getComputedStyle(el);
-      const overflow = (cs.overflow + cs.overflowY + cs.overflowX).toLowerCase();
-      const scrollable = /auto|scroll|overlay/.test(overflow);
-      return scrollable && (el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2);
-    } catch {
-      return false;
-    }
-  };
-
-  const centerWindowOnFirstRect = () => {
-    try {
-      if (!firstView || !Number.isFinite(firstView.t)) return;
-      const cur = getScrollState();
-      const centerOffsetY = Math.round((vh / 2) - (firstView.h / 2));
-      const targetY = Math.max(0, Math.round(cur.sy + firstView.t - centerOffsetY));
-      const centerOffsetX = Math.round((vw / 2) - (firstView.w / 2));
-      const targetX = Math.max(0, Math.round(cur.sx + firstView.l - centerOffsetX));
-      window.scrollTo({ top: targetY, left: targetX, behavior: 'smooth' });
-    } catch {}
-  };
-
-  const autoScrollToFirstOverlay = () => {
-    if (!needScroll) return;
-    try {
-      const anchors = Array.isArray(window.__guideAnchors) ? window.__guideAnchors : [];
-      const primary = anchors.find(a => a && a.el);
-      const ensureRecalcSoon = () => {
-        setTimeout(() => {
-          try {
-            if (typeof window.__guideRecalc === 'function') window.__guideRecalc();
-          } catch {}
-        }, 180);
-      };
-      const scrollOpts = { behavior: 'smooth', block: 'center', inline: 'center' };
-      let moved = false;
-
-      if (primary && primary.el) {
-        try {
-          primary.el.scrollIntoView(scrollOpts);
-          moved = true;
-        } catch {}
-
-        if (!moved) {
-          let ancestor = primary.el.parentElement;
-          while (ancestor) {
-            if (isScrollable(ancestor)) {
-              try {
-                const containerRect = ancestor.getBoundingClientRect();
-                const targetRect = primary.el.getBoundingClientRect();
-                const deltaY = targetRect.top - containerRect.top - (ancestor.clientHeight / 2) + (targetRect.height / 2);
-                const deltaX = targetRect.left - containerRect.left - (ancestor.clientWidth / 2) + (targetRect.width / 2);
-                ancestor.scrollTo({
-                  top: ancestor.scrollTop + deltaY,
-                  left: ancestor.scrollLeft + deltaX,
-                  behavior: 'smooth'
-                });
-                moved = true;
-                break;
-              } catch {}
-            }
-            ancestor = ancestor.parentElement;
-          }
-        }
-
-        if (!moved && primary.withinIframe && primary.iframeEl) {
-          try {
-            const frameWin = primary.iframeEl.contentWindow;
-            if (frameWin && typeof frameWin.scrollTo === 'function') {
-              const rect = primary.el.getBoundingClientRect();
-              const frameRect = primary.iframeEl.getBoundingClientRect();
-              const targetTop = frameWin.scrollY + rect.top - frameRect.top - (frameWin.innerHeight / 2) + (rect.height / 2);
-              const targetLeft = frameWin.scrollX + rect.left - frameRect.left - (frameWin.innerWidth / 2) + (rect.width / 2);
-              frameWin.scrollTo({
-                top: Math.max(0, targetTop),
-                left: Math.max(0, targetLeft),
-                behavior: 'smooth'
-              });
-              moved = true;
-            }
-          } catch {}
-        }
-      }
-
-      if (!moved) {
-        centerWindowOnFirstRect();
-        moved = true;
-      }
-
-      if (moved) ensureRecalcSoon();
-    } catch (err) {
-      console.warn('[content.js] autoScrollToFirstOverlay failed', err);
-      centerWindowOnFirstRect();
-    }
-  };
-
-  const renderAll = () => {
+   const renderAll = () => {
+     // Dimmed full-screen overlay background (반투명 전체 배경 오버레이)
     const overlay = document.createElement('div');
     overlay.className = 'guide-overlay';
     if (coordSpace === 'screenshot' && opts.screenshot) {
-      overlay.style.backgroundImage = url();
+      overlay.style.backgroundImage = `url(${opts.screenshot})`;
       overlay.style.backgroundRepeat = 'no-repeat';
       const bgW = Math.round((shot && shot.width) ? (shot.width / scaleX) : vw);
       const bgH = Math.round((shot && shot.height) ? (shot.height / scaleY) : vh);
-      overlay.style.backgroundSize = bgW + 'px ' + bgH + 'px';
-      overlay.style.backgroundPosition = (-capturedSX) + 'px ' + (-capturedSY) + 'px';
+      overlay.style.backgroundSize = `${bgW}px ${bgH}px`;
+      // Shift background to the captured scroll window
+      overlay.style.backgroundPosition = `${-capturedSX}px ${-capturedSY}px`;
     }
     document.body.appendChild(overlay);
+    // Allow full interaction with page (scroll/click-through). Provide ESC to close.
     const onEsc = (e) => { if (e.key === 'Escape') removeGuides(); };
     window.addEventListener('keydown', onEsc, { once: true });
     window.__guideEscHandler = onEsc;
-
+    // Report a click as step completion to panel for continuation
     const clickHandler = (ev) => {
-      if (!ev || !ev.isTrusted) return;
+      if (!ev || !ev.isTrusted) return; // ignore synthetic clicks
       if (ev.defaultPrevented) return;
       try {
-        chrome.runtime?.sendMessage?.({ action: 'guideStepCompleted', session_id: (opts && opts.session_id) || window.__guideSessionId || null, step_index: (opts && typeof opts.step_index === 'number') ? opts.step_index : 0 });
+        chrome.runtime?.sendMessage?.({ action: 'guideStepCompleted', session_id: (opts && opts.session_id) || window.__guideSessionId || null, step_index: (opts && typeof opts.step_index==='number') ? opts.step_index : 0 });
       } catch {}
+      // Dismiss current overlays immediately so new page/step can render fresh
       try { setTimeout(removeGuides, 10); } catch {}
     };
     document.addEventListener('click', clickHandler, { capture: true, once: true });
@@ -398,6 +313,7 @@ function showGuides(overlays, opts = {}) {
         if (!overlayEl) return;
         const list = (window.__guideState && window.__guideState.overlays) ? window.__guideState.overlays : null;
         if (!Array.isArray(list)) return;
+        // Optionally log when scroll delta changes by >= 2px
         try {
           const curDx = (window.scrollX - capturedSX);
           const curDy = (window.scrollY - capturedSY);
@@ -411,36 +327,29 @@ function showGuides(overlays, opts = {}) {
         const labels = Array.from(overlayEl.querySelectorAll('.guide-label'));
         for (let i = 0; i < list.length; i++) {
           const ov = list[i] || {};
-          let left; let top; let w; let h;
+          let left, top, w, h;
+          // Prefer anchor element tracking if available (handles inner scrolling and iframes)
           try {
             const a = window.__guideAnchors ? window.__guideAnchors[i] : null;
             if (a && a.el) {
               const r = a.el.getBoundingClientRect();
               if (a.iframeEl) {
                 const ir = a.iframeEl.getBoundingClientRect();
-                left = Math.round(ir.left + r.left);
-                top = Math.round(ir.top + r.top);
-                w = Math.round(r.width);
-                h = Math.round(r.height);
+                left = Math.round(ir.left + r.left); top = Math.round(ir.top + r.top); w = Math.round(r.width); h = Math.round(r.height);
               } else {
-                left = Math.round(r.left);
-                top = Math.round(r.top);
-                w = Math.round(r.width);
-                h = Math.round(r.height);
+                left = Math.round(r.left); top = Math.round(r.top); w = Math.round(r.width); h = Math.round(r.height);
               }
             }
           } catch {}
-          if (!Number.isFinite(left) || !Number.isFinite(top)) {
+          if (!isFinite(left) || !isFinite(top)) {
             const best = bestViewportRect(ov);
             left = best.l; top = best.t; w = best.w; h = best.h;
           }
-          const hl = children[i];
-          const label = labels[i];
-          if (!hl || !label) continue;
-          hl.style.left = left + 'px';
-          hl.style.top = top + 'px';
-          hl.style.width = w + 'px';
-          hl.style.height = h + 'px';
+          const hl = children[i]; const label = labels[i]; if (!hl || !label) continue;
+          hl.style.left = `${left}px`;
+          hl.style.top = `${top}px`;
+          hl.style.width = `${w}px`;
+          hl.style.height = `${h}px`;
           let labelLeft = Math.max(8, left);
           let labelTop = top - 40;
           let positionClass = 'above';
@@ -452,30 +361,33 @@ function showGuides(overlays, opts = {}) {
             const lw = label.offsetWidth || 0;
             if (labelLeft + lw + 8 > vw2) labelLeft = Math.max(8, vw2 - lw - 8);
           } catch {}
-          label.style.left = labelLeft + 'px';
-          label.style.top = Math.max(8, labelTop) + 'px';
+          label.style.left = `${labelLeft}px`;
+          label.style.top = `${Math.max(8, labelTop)}px`;
         }
       } catch {}
     };
 
+    // Initial DOM creation (guard against null state)
     const initList = (window.__guideState && Array.isArray(window.__guideState.overlays))
       ? window.__guideState.overlays
       : [];
     initList.forEach((ov, idx) => {
       if (!ov || typeof ov !== 'object') return;
       const best = bestViewportRect(ov);
-      const left = best.l; const top = best.t; const w = best.w; const h = best.h;
-      if (!(Number.isFinite(left) && Number.isFinite(top) && Number.isFinite(w) && Number.isFinite(h))) return;
+      const left = best.l, top = best.t, w = best.w, h = best.h;
+      if (!(isFinite(left)&&isFinite(top)&&isFinite(w)&&isFinite(h))) return;
       if (w < 2 || h < 2) return;
 
+      // Highlight
       const hl = document.createElement('div');
       hl.className = 'guide-highlight';
-      hl.style.left = left + 'px';
-      hl.style.top = top + 'px';
-      hl.style.width = w + 'px';
-      hl.style.height = h + 'px';
+      hl.style.left = `${left}px`;
+      hl.style.top = `${top}px`;
+      hl.style.width = `${w}px`;
+      hl.style.height = `${h}px`;
       overlay.appendChild(hl);
 
+      // Label
       const label = document.createElement('div');
       label.className = 'guide-label';
       const num = document.createElement('span');
@@ -483,10 +395,8 @@ function showGuides(overlays, opts = {}) {
       num.textContent = getCircledNumber(idx + 1);
       const text = document.createElement('span');
       text.className = 'text';
-      const fallbackLabel = '단계 ' + (idx + 1);
-      text.textContent = (ov.label || fallbackLabel).toString();
-      label.appendChild(num);
-      label.appendChild(text);
+      text.textContent = (ov.label || `단계 ${idx + 1}`).toString();
+      label.appendChild(num); label.appendChild(text);
 
       let labelLeft = Math.max(8, left);
       let labelTop = top - 40;
@@ -495,37 +405,29 @@ function showGuides(overlays, opts = {}) {
       label.classList.add(positionClass);
       overlay.appendChild(label);
       try {
-        const vwCur = window.innerWidth || document.documentElement.clientWidth || 0;
+        const vw = window.innerWidth || document.documentElement.clientWidth || 0;
         const lw = label.offsetWidth || 0;
-        if (labelLeft + lw + 8 > vwCur) labelLeft = Math.max(8, vwCur - lw - 8);
+        if (labelLeft + lw + 8 > vw) labelLeft = Math.max(8, vw - lw - 8);
       } catch {}
-      label.style.left = labelLeft + 'px';
-      label.style.top = Math.max(8, labelTop) + 'px';
+      label.style.left = `${labelLeft}px`;
+      label.style.top = `${Math.max(8, labelTop)}px`;
 
+      // Save a stable anchor if available
       try {
         window.__guideAnchors = window.__guideAnchors || [];
-        let anchor = null; let withinIframe = false; let iframeEl = null;
+        let anchor = null, withinIframe = false, iframeEl = null;
         if (typeof ov.anchor_selector === 'string' && ov.anchor_selector) {
           try { anchor = document.querySelector(ov.anchor_selector); } catch {}
         }
         if (!anchor) {
-          const cx = Math.max(1, Math.min((window.innerWidth || 0) - 2, left + w / 2));
-          const cy = Math.max(1, Math.min((window.innerHeight || 0) - 2, top + h / 2));
+          const cx = Math.max(1, Math.min((window.innerWidth||0)-2, left + w/2));
+          const cy = Math.max(1, Math.min((window.innerHeight||0)-2, top + h/2));
           let hit = document.elementFromPoint(cx, cy);
           if (hit && hit.tagName === 'IFRAME') {
             const r = hit.getBoundingClientRect();
             try {
-              const ax = cx - r.left;
-              const ay = cy - r.top;
-              const innerDoc = hit.contentDocument;
-              const innerWin = hit.contentWindow;
-              if (innerDoc && innerWin) {
-                const innerEl = innerDoc.elementFromPoint(
-                  Math.max(1, Math.min(innerWin.innerWidth - 2, ax)),
-                  Math.max(1, Math.min(innerWin.innerHeight - 2, ay))
-                );
-                if (innerEl) { anchor = innerEl; withinIframe = true; iframeEl = hit; }
-              }
+              const ax = cx - r.left, ay = cy - r.top; const innerDoc = hit.contentDocument; const innerWin = hit.contentWindow;
+              if (innerDoc && innerWin) { const innerEl = innerDoc.elementFromPoint(Math.max(1, Math.min(innerWin.innerWidth-2, ax)), Math.max(1, Math.min(innerWin.innerHeight-2, ay))); if (innerEl) { anchor = innerEl; withinIframe = true; iframeEl = hit; } }
             } catch {}
           }
           if (!anchor) anchor = hit;
@@ -534,12 +436,22 @@ function showGuides(overlays, opts = {}) {
       } catch {}
     });
 
+    // Attach live recalc listeners for both coordinate spaces
     window.__guideRecalc = () => recalc();
     window.addEventListener('scroll', window.__guideRecalc, { capture: true, passive: true });
     document.addEventListener('scroll', window.__guideRecalc, { capture: true, passive: true });
     try { document.scrollingElement && document.scrollingElement.addEventListener('scroll', window.__guideRecalc, { capture: true, passive: true }); } catch {}
 
+    // Also bind to nearest scrollable ancestors of target regions (AWS pages often use inner scrollers)
     try {
+      const isScrollable = (el) => {
+        try {
+          const cs = getComputedStyle(el);
+          const over = (cs.overflow + cs.overflowY + cs.overflowX).toLowerCase();
+          const flag = /auto|scroll|overlay/.test(over);
+          return flag && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth);
+        } catch { return false; }
+      };
       const addScrollTarget = (el) => {
         try {
           if (!el) return;
@@ -551,32 +463,38 @@ function showGuides(overlays, opts = {}) {
       };
       const vrects = (window.__guideState.overlays || []).map(ov => bestViewportRect(ov));
       vrects.forEach(r => {
-        const cx = Math.max(1, Math.min((window.innerWidth || 0) - 2, (r.l || 0) + (r.w || 0) / 2));
-        const cy = Math.max(1, Math.min((window.innerHeight || 0) - 2, (r.t || 0) + (r.h || 0) / 2));
+        const cx = Math.max(1, Math.min((window.innerWidth||0)-2, (r.l||0) + (r.w||0)/2));
+        const cy = Math.max(1, Math.min((window.innerHeight||0)-2, (r.t||0) + (r.h||0)/2));
         let el = document.elementFromPoint(cx, cy);
         let hops = 0;
-        while (el && hops < 8) {
-          if (isScrollable(el)) { addScrollTarget(el); break; }
-          el = el.parentElement;
-          hops++;
-        }
+        while (el && hops < 8) { if (isScrollable(el)) { addScrollTarget(el); break; } el = el.parentElement; hops++; }
       });
     } catch {}
     window.addEventListener('resize', window.__guideRecalc, { capture: true, passive: true });
 
+    // Start rAF tick to follow any scroll/animation in nested contexts
     try {
       const tick = () => { try { recalc(); } catch {} ; window.__guideRafId = requestAnimationFrame(tick); };
       window.__guideRafId = requestAnimationFrame(tick);
     } catch {}
 
+    // Auto remove after 15s (15초 후 자동 제거)
     if (window.__guideTimeout) clearTimeout(window.__guideTimeout);
     window.__guideTimeout = setTimeout(removeGuides, 15000);
   };
 
-  renderAll();
-  requestAnimationFrame(() => {
-    try { autoScrollToFirstOverlay(); } catch {}
-  });
+  if (needScroll) {
+    // Render first so recalc listeners are attached, then scroll; overlay will follow
+    renderAll();
+    try {
+      const cur = getScrollState();
+      const centerOffset = Math.round((vh / 2) - (firstView.h / 2));
+      const targetY = Math.max(0, Math.round(cur.sy + firstView.t - centerOffset));
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    } catch {}
+  } else {
+    renderAll();
+  }
 }
 
 // Make helpers globally callable (전역에서 호출 가능하도록 노출)

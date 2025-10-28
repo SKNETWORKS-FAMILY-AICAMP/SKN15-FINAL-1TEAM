@@ -83,93 +83,6 @@ function stripLeadingMarker(str) {
   }
 }
 
-function appendModeBanner(isWebGuide) {
-  try {
-    if (!messagesEl) return;
-    const label = isWebGuide ? "웹 가이드 모드" : "챗봇 모드";
-    const last = messagesEl.lastElementChild;
-    if (last && last.classList?.contains("mode-banner") && last.dataset?.mode === label) {
-      return;
-    }
-    const banner = document.createElement("div");
-    banner.className = "mode-banner";
-    banner.dataset.mode = label;
-    banner.innerHTML = `<span> ${label} </span>`;
-    messagesEl.appendChild(banner);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  } catch {}
-}
-
-// Collect local time/location context for the backend
-function collectLocalContext() {
-  try {
-    const now = new Date();
-    const resolved = typeof Intl !== 'undefined' && Intl.DateTimeFormat
-      ? Intl.DateTimeFormat().resolvedOptions?.() || {}
-      : {};
-    const navLang = typeof navigator !== 'undefined' ? (navigator.language || navigator.userLanguage || null) : null;
-    const locale = navLang || resolved.locale || null;
-    const timeZone = resolved.timeZone || null;
-
-    let display = null;
-    try {
-      display = new Intl.DateTimeFormat(locale || undefined, {
-        dateStyle: "full",
-        timeStyle: "long",
-        timeZone: timeZone || undefined
-      }).format(now);
-    } catch {
-      try {
-        display = new Intl.DateTimeFormat("en-US", {
-          dateStyle: "full",
-          timeStyle: "long",
-          timeZone: timeZone || undefined
-        }).format(now);
-      } catch {
-        display = now.toISOString();
-      }
-    }
-
-    let timeZoneName = null;
-    try {
-      const parts = new Intl.DateTimeFormat(locale || undefined, {
-        timeZone: timeZone || undefined,
-        timeZoneName: "long"
-      }).formatToParts(now);
-      const tzPart = parts.find((p) => p?.type === "timeZoneName");
-      timeZoneName = tzPart?.value || null;
-    } catch {
-      timeZoneName = null;
-    }
-
-    const tzParts = (timeZone || "").split("/");
-    let approx = null;
-    if (tzParts.length >= 2) {
-      approx = tzParts.slice(1).join(" / ").replace(/_/g, " ");
-    }
-    const localeParts = (locale || "").split(/[-_]/);
-    const regionCode = localeParts.length >= 2 ? localeParts[1].toUpperCase() : null;
-    if (approx && regionCode) {
-      approx = `${approx}, ${regionCode}`;
-    } else if (!approx && regionCode) {
-      approx = regionCode;
-    }
-
-    return {
-      timestamp_ms: now.getTime(),
-      iso: now.toISOString(),
-      time_zone: timeZone || null,
-      time_zone_name: timeZoneName,
-      locale,
-      display,
-      approx_location: approx
-    };
-  } catch (err) {
-    try { console.warn("collectLocalContext failed", err); } catch {}
-    return null;
-  }
-}
-
 document.addEventListener("DOMContentLoaded", () => {
   try {
     // Load persisted chat history (저장된 채팅 불러오기)
@@ -182,10 +95,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const webGuideBtn = document.getElementById("webGuideButton");
     if (webGuideBtn) {
       webGuideBtn.addEventListener("click", () => {
-        const willActivate = !webGuideBtn.classList.contains("active");
-        toggleWebGuideMode(willActivate);
+        webGuideBtn.classList.toggle("active");
+        const active = webGuideBtn.classList.contains("active");
+        webGuideBtn.textContent = active ? "챗봇 모드로 전환" : "웹 가이드 모드로 전환";
+        toggleWebGuideMode(active);
       });
-      toggleWebGuideMode(webGuideBtn.classList.contains("active"));
     }
 
     // Capture modes simplified: Only combined HTML+Image via getPageData
@@ -367,7 +281,6 @@ async function handleSend() {
       }
 
       const shotInfo = await getImageSize(pageData?.screenshot);
-      const localContext = collectLocalContext();
 
       const payload = {
         mode: 'web-guide',
@@ -385,8 +298,7 @@ async function handleSend() {
           : null,
         device_pixel_ratio: Number(pageData?.viewport?.dpr || window.devicePixelRatio || 1),
         scroll: pageData?.scroll || { x: 0, y: 0 },
-        page_state: pageData?.state || null,
-        local_context: localContext || undefined
+        page_state: pageData?.state || null
       };
 
       console.log("payload preview", { message: payload.message, url: payload.url });
@@ -618,13 +530,7 @@ async function handleSend() {
       return hints.some(k => s.includes(k));
     };
 
-    const localContext = collectLocalContext();
-    let chatPayload = {
-      mode: 'chat',
-      message: text,
-      history: getRecentHistory(8, text),
-      local_context: localContext || undefined
-    };
+    let chatPayload = { mode: 'chat', message: text, history: getRecentHistory(8, text) };
 
     if (isPageInfoQuery(text)) {
       // Fetch page context to enrich the chatbot response (no overlays in chat mode)
@@ -638,8 +544,7 @@ async function handleSend() {
         url: pageData?.url || "",
         html: pageData?.html || null,
         elements: pageData?.elements || [],
-        history: getRecentHistory(8, text),
-        local_context: localContext || undefined
+        history: getRecentHistory(8, text)
       };
     }
 
@@ -907,12 +812,6 @@ function saveMessage(text) {
 // Web guide mode stub (웹 가이드 모드 상태 전환 처리용)
 function toggleWebGuideMode(isActive) {
   console.log("웹 가이드 모드:", isActive ? "활성화" : "비활성화");
-  const button = document.getElementById("webGuideButton");
-  if (button) {
-    button.classList.toggle("active", Boolean(isActive));
-    button.textContent = isActive ? "챗봇 모드로 전환" : "웹 가이드 모드로 전환";
-  }
-  appendModeBanner(Boolean(isActive));
   // 필요 시 추가 로직 구현 (e.g., 컨텐츠 스크립트 알림 등)
   if (!isActive) {
     resetGuideSession();
@@ -957,7 +856,6 @@ async function continueGuideFlow() {
     currentGuideSession.prevUrl = pageData?.url || currentGuideSession.prevUrl || '';
     // Compute screenshot natural size (needed for precise overlay scaling)
     const shotInfo = await (async (dataUrl)=>new Promise((resolve)=>{ try{ if(!dataUrl) return resolve(null); const img=new Image(); img.onload=()=>resolve({ width: img.naturalWidth, height: img.naturalHeight }); img.onerror=()=>resolve(null); img.src=dataUrl; }catch{ resolve(null);} })) (pageData?.screenshot);
-    const localContext = collectLocalContext();
     const payload = {
       mode: 'web-guide', guideType: 'overlay', message: currentGuideSession.message,
       screenshot: pageData?.screenshot || null, url: pageData?.url || "",
@@ -966,7 +864,6 @@ async function continueGuideFlow() {
       page_viewport_rect: pageData?.viewport ? { x:0, y:0, width:Number(pageData.viewport.width||0), height:Number(pageData.viewport.height||0) } : null,
       device_pixel_ratio: Number(pageData?.viewport?.dpr || window.devicePixelRatio || 1),
       scroll: pageData?.scroll || {x:0,y:0}, page_state: pageData?.state || null,
-      local_context: localContext || undefined,
       progress: {
         last_step_done: stepDone,
         prev_overlays: last.overlays || [],

@@ -34,141 +34,6 @@ app.use(express.json({ limit: "20mb" }));
 // Use node-fetch via dynamic import (동적 임포트로 node-fetch 사용)
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-function normalizeLocalContext(rawContext) {
-  const fallbackNow = new Date();
-  const resolved = typeof Intl !== "undefined" && Intl.DateTimeFormat
-    ? Intl.DateTimeFormat().resolvedOptions?.() || {}
-    : {};
-
-  const fallback = {
-    iso: fallbackNow.toISOString(),
-    epochMs: fallbackNow.getTime(),
-    timeZone: resolved.timeZone || "UTC",
-    locale: resolved.locale || "en-US",
-    approxLocation: null,
-    display: null,
-    timeZoneName: null
-  };
-
-  const ctx = { ...fallback };
-  const source = rawContext && typeof rawContext === "object" ? rawContext : {};
-
-  const pickString = (...values) => {
-    for (const value of values) {
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
-      }
-    }
-    return null;
-  };
-
-  const isoCandidate = pickString(
-    source.iso,
-    source.datetime,
-    source.local_datetime_iso,
-    source.local_time_iso
-  );
-  const timestampCandidate = (() => {
-    const candidates = [source.timestamp_ms, source.timestamp, source.epoch_ms, source.epoch];
-    for (const val of candidates) {
-      if (typeof val === "number" && Number.isFinite(val)) return val;
-      if (typeof val === "string" && val.trim() && !Number.isNaN(Number(val))) {
-        return Number(val);
-      }
-    }
-    return null;
-  })();
-
-  if (isoCandidate && !Number.isNaN(Date.parse(isoCandidate))) {
-    const parsed = new Date(isoCandidate);
-    ctx.iso = parsed.toISOString();
-    ctx.epochMs = parsed.getTime();
-  } else if (timestampCandidate !== null) {
-    const parsed = new Date(Number(timestampCandidate));
-    ctx.iso = parsed.toISOString();
-    ctx.epochMs = parsed.getTime();
-  }
-
-  const timeZoneCandidate = pickString(source.time_zone, source.timezone, source.tz);
-  if (timeZoneCandidate) ctx.timeZone = timeZoneCandidate;
-
-  const localeCandidate = pickString(source.locale, source.language, source.lang);
-  if (localeCandidate) ctx.locale = localeCandidate;
-
-  const locationCandidate = pickString(source.approx_location, source.location, source.city);
-  if (locationCandidate) ctx.approxLocation = locationCandidate;
-
-  const displayCandidate = pickString(source.display, source.formatted, source.readable);
-  if (displayCandidate) ctx.display = displayCandidate;
-
-  const timeZoneNameCandidate = pickString(source.time_zone_name, source.timezone_name);
-  if (timeZoneNameCandidate) ctx.timeZoneName = timeZoneNameCandidate;
-
-  if (!ctx.approxLocation && ctx.timeZone) {
-    const parts = ctx.timeZone.split("/");
-    if (parts.length >= 2) {
-      ctx.approxLocation = parts.slice(1).join(" / ").replace(/_/g, " ");
-    }
-  }
-
-  if (!ctx.display) {
-    try {
-      ctx.display = new Intl.DateTimeFormat(ctx.locale || undefined, {
-        dateStyle: "full",
-        timeStyle: "long",
-        timeZone: ctx.timeZone || undefined
-      }).format(new Date(ctx.iso));
-    } catch {
-      try {
-        ctx.display = new Intl.DateTimeFormat("en-US", {
-          dateStyle: "full",
-          timeStyle: "long",
-          timeZone: ctx.timeZone || undefined
-        }).format(new Date(ctx.iso));
-      } catch {
-        ctx.display = ctx.iso;
-      }
-    }
-  }
-
-  if (!ctx.timeZoneName && ctx.timeZone) {
-    try {
-      const parts = new Intl.DateTimeFormat(ctx.locale || undefined, {
-        timeZone: ctx.timeZone || undefined,
-        timeZoneName: "long"
-      }).formatToParts(new Date(ctx.iso));
-      const tzPart = parts.find((p) => p?.type === "timeZoneName");
-      ctx.timeZoneName = tzPart?.value || null;
-    } catch {
-      ctx.timeZoneName = null;
-    }
-  }
-
-  const dateOnly = ctx.iso.slice(0, 10);
-  const timeOnly = ctx.iso.slice(11, 19);
-  const lines = [
-    `local_datetime_iso=${ctx.iso}`,
-    `local_epoch_ms=${ctx.epochMs}`,
-    ctx.timeZone ? `local_timezone=${ctx.timeZone}` : null,
-    ctx.timeZoneName ? `local_timezone_name=${ctx.timeZoneName}` : null,
-    `local_date=${dateOnly}`,
-    `local_time=${timeOnly}`,
-    ctx.display ? `local_display=${ctx.display}` : null,
-    ctx.approxLocation ? `approx_location=${ctx.approxLocation}` : null,
-    ctx.locale ? `system_locale=${ctx.locale}` : null
-  ].filter(Boolean);
-
-  const locationSummary = ctx.approxLocation || ctx.timeZoneName || ctx.timeZone || "the assistant's current locale";
-  const displaySummary = ctx.display || ctx.iso;
-  const systemPrompt = `Local context: the system clock reads ${displaySummary}${ctx.timeZone ? ` (${ctx.timeZone})` : ""}. Base all references to "today", "now", or similar on this clock (ISO ${ctx.iso}). When the user asks about the current date, time, timezone, or your location, answer using this context and mention the relevant details. Unless the user specifies otherwise, treat the assistant as operating near ${locationSummary}.`;
-
-  return {
-    ...ctx,
-    userBlock: lines.length ? `[LOCAL_CONTEXT]\n${lines.join("\n")}\n[END_LOCAL_CONTEXT]` : null,
-    systemPrompt
-  };
-}
-
 /* ============================================================
  * POST /chat
  * - General chat & "Web Guide" overlay/information mode
@@ -188,7 +53,6 @@ app.post("/chat", async (req, res) => {
     const clientGuideType = (typeof payload.guideType === 'string') ? payload.guideType.toLowerCase() : null;
     const guideType = isWebGuide ? (clientGuideType === 'info' ? 'info' : 'overlay') : null;
     const wantsOverlay = isWebGuide && guideType === 'overlay';
-    const localContext = normalizeLocalContext(payload.local_context || payload.localContext || null);
 
     // System prompt describes how the assistant should behave
     // (어시스턴트의 동작 방식을 지시하는 시스템 프롬프트)
@@ -234,10 +98,6 @@ app.post("/chat", async (req, res) => {
     const trimmedMessage = (userMessage || "").toString().trim();
     if (trimmedMessage) {
       userContent.push({ type: "text", text: trimmedMessage });
-    }
-
-    if (localContext?.userBlock) {
-      userContent.push({ type: "text", text: localContext.userBlock });
     }
 
     // Optional: page text or HTML snippets (페이지 텍스트/HTML 스니펫 추가)
@@ -337,9 +197,6 @@ app.post("/chat", async (req, res) => {
     const messages = [];
     if (typeof systemPrompt === 'string' && systemPrompt.trim()) {
       messages.push({ role: 'system', content: systemPrompt });
-    }
-    if (localContext?.systemPrompt) {
-      messages.push({ role: 'system', content: localContext.systemPrompt });
     }
 
     // Include brief conversation history if provided (요청에 과거 대화 포함 시 사용)
