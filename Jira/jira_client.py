@@ -1,522 +1,444 @@
-"""Jira REST client wrapper used by the LangGraph CLI bot.
-
-This module keeps the Jira specific logic in one place so that
-`graph_cli.py` can stay focused on orchestration / ranking / CLI UX.
+# -*- coding: utf-8 -*-
 """
-from __future__ import annotations
+jira_client.py - Jira REST API 클라이언트
 
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+역할:
+1. 프로젝트/이슈 타입 조회
+2. 이슈 생성/수정/삭제
+3. JQL 검색
+4. 에러 처리 및 레이트 리밋 대응
 
-import logging
+연결:
+- config.py → JIRA_BASE_URL, AUTH, SESSION 사용
+- graph.py → 모든 Jira 작업에서 호출
+"""
+
+from typing import List, Dict, Any, Optional
 import requests
 
-__all__ = [
-    "Issue",
-    "JiraClient",
-    "JiraClientError",
-    "adf_to_text",
-    "normalize_issue_type",
-    "to_adf",
-]
-
-logger = logging.getLogger(__name__)
+from .config import JIRA_BASE_URL, HDR_JSON, AUTH, SESSION, TIMEOUT
 
 
-KOREAN_ISSUE_TYPE_MAP = {
-    "작업": "Task",
-    "버그": "Bug",
-    "스토리": "Story",
-    "서브태스크": "Sub-task",
-    "서브 태스크": "Sub-task",
-    "에픽": "Epic",
-    "스파이크": "Spike",
-}
+# ─────────────────────────────────────────────────────────
+# 프로젝트 및 이슈 타입 조회
+# ─────────────────────────────────────────────────────────
+def list_projects(limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    접근 가능한 프로젝트 목록 조회
+    
+    Args:
+        limit: 최대 반환 개수
+    
+    Returns:
+        [{"key": "KAN", "name": "칸반 프로젝트", ...}, ...]
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/project/search"
+    params = {"maxResults": limit}
+    
+    try:
+        resp = SESSION.get(url, headers=HDR_JSON, params=params, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("values", [])
+    except Exception as e:
+        print(f"[경고] 프로젝트 목록 조회 실패: {e}")
+        return []
 
 
-@dataclass
-class Issue:
-    """Minimal issue representation for ranking and rendering."""
-
-    key: str
-    summary: str
-    description: Optional[str]
-    status: Optional[str]
-    priority: Optional[str]
-    due_date: Optional[str]
-    assignee: Optional[str]
-    project: Optional[str]
-    issue_type: Optional[str]
-    raw: Dict[str, Any]
-
-    def short_label(self) -> str:
-        return f"{self.key} · {self.summary}" if self.summary else self.key
-
-
-class JiraClientError(RuntimeError):
-    def __init__(self, message: str, status_code: Optional[int] = None, payload: Any | None = None):
-        super().__init__(message)
-        self.status_code = status_code
-        self.payload = payload
+def list_issue_types(limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    사용 가능한 이슈 타입 목록 조회
+    
+    Returns:
+        [{"name": "Task", "subtask": False, ...}, ...]
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/issuetype"
+    
+    try:
+        resp = SESSION.get(url, headers=HDR_JSON, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+        types = resp.json()
+        return types[:limit]
+    except Exception as e:
+        print(f"[경고] 이슈 타입 조회 실패: {e}")
+        return []
 
 
-class JiraClient:
-    """Thin wrapper around Jira REST API with opinionated helpers."""
+# ─────────────────────────────────────────────────────────
+# JQL 검색
+# ─────────────────────────────────────────────────────────
+def jql_search(
+    jql: str,
+    fields: Optional[List[str]] = None,
+    max_results: int = 50
+) -> List[Dict[str, Any]]:
+    """
+    JQL 검색
+    
+    Args:
+        jql: JQL 쿼리 (예: "project = KAN AND status = Open")
+        fields: 반환할 필드 리스트
+        max_results: 최대 결과 수
+    
+    Returns:
+        이슈 리스트
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/search"
+    
+    body = {
+        "jql": jql,
+        "maxResults": max_results
+    }
+    
+    if fields:
+        body["fields"] = fields
+    
+    try:
+        resp = SESSION.post(url, headers=HDR_JSON, json=body, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("issues", [])
+    except Exception as e:
+        print(f"[경고] JQL 검색 실패: {e}")
+        return []
 
-    def __init__(
-        self,
-        base_url: str,
-        email: str,
-        api_token: str,
-        *,
-        timeout: Tuple[float, float] = (5.0, 20.0),
-        session: Optional[requests.Session] = None,
-    ) -> None:
-        if not base_url:
-            raise ValueError("base_url is required")
-        if not email:
-            raise ValueError("email is required")
-        if not api_token:
-            raise ValueError("api_token is required")
 
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-        self.session = session or requests.Session()
-        self.session.auth = (email, api_token)
-        self.session.headers.update({"Accept": "application/json"})
-
-    # ------------------------------------------------------------------
-    # Public API
-
-    def get_issue(self, issue_key: str, *, fields: Optional[Sequence[str]] = None) -> Issue:
-        params = {"fields": ",".join(fields)} if fields else None
-        data = self._request("GET", f"/rest/api/3/issue/{issue_key}", params=params)
-        return self._parse_issue(data)
-
-    def search_issues(
-        self,
-        *,
-        project_key: Optional[str] = None,
-        keyword: Optional[str] = None,
-        jql: Optional[str] = None,
-        limit: int = 50,
-        fields: Optional[Sequence[str]] = None,
-    ) -> List[Issue]:
-        if limit <= 0:
-            return []
-
-        fields = list(fields) if fields else [
-            "summary",
-            "description",
-            "status",
-            "priority",
-            "duedate",
-            "assignee",
-            "project",
-            "issuetype",
-        ]
-        jql_query = self._build_search_jql(project_key, keyword, jql)
-        max_results = min(limit, 100)
-        payload_candidates: List[Dict[str, Any]] = [
-            {
-                "queries": [
-                    {
-                        "jql": {"query": jql_query},
-                        "maxResults": max_results,
-                        "startAt": 0,
-                        "fields": {
-                            "include": fields,
-                            "exclude": [],
-                        },
-                    }
-                ]
-            },
-            {
-                "queries": [
-                    {
-                        "query": jql_query,
-                        "maxResults": max_results,
-                        "startAt": 0,
-                    }
-                ],
-                "fields": {
-                    "include": fields,
-                    "exclude": [],
-                },
-            },
-            {
-                "jql": {"query": jql_query},
-                "maxResults": max_results,
-                "startAt": 0,
-                "fields": {
-                    "include": fields,
-                    "exclude": [],
-                },
-            },
-            {
-                "jql": jql_query,
-                "maxResults": max_results,
-                "startAt": 0,
-                "fields": {
-                    "include": fields,
-                    "exclude": [],
-                },
-            },
-            {
-                "queries": [
-                    {
-                        "jql": jql_query,
-                        "maxResults": max_results,
-                        "startAt": 0,
-                    }
-                ],
-                "fields": fields,
-            },
-            {
-                "jql": jql_query,
-                "maxResults": max_results,
-                "startAt": 0,
-                "fields": fields,
-            },
-        ]
-
-        last_error: Optional[JiraClientError] = None
-        data: Optional[Dict[str, Any]] = None
-        for candidate in payload_candidates:
-            try:
-                response_data = self._request("POST", "/rest/api/3/search/jql", json=candidate)
-                if not isinstance(response_data, dict):
-                    raise JiraClientError(
-                        "Jira 검색 API가 JSON이 아닌 응답을 반환했습니다.",
-                        payload=response_data,
-                    )
-                data = _select_first_search_result(response_data)
-                break
-            except JiraClientError as exc:
-                if exc.status_code == 404:
-                    raise JiraClientError(
-                        "Jira 검색 API 엔드포인트가 비활성화되어 있습니다. 최신 Jira Search API를 활성화하거나 CHANGE-2046 가이드를 확인하세요.",
-                        exc.status_code,
-                        payload=exc.payload,
-                    ) from exc
-                if exc.status_code in {400, 415} and "Invalid request payload" in str(exc):
-                    last_error = exc
-                    continue
-                raise
-        else:
-            # POST가 모두 실패하면 GET 요청으로 최후 시도
-            try:
-                params = {
-                    "jql": jql_query,
-                    "maxResults": max_results,
-                    "startAt": 0,
-                    "fields": ",".join(fields),
+# ─────────────────────────────────────────────────────────
+# 이슈 생성
+# ─────────────────────────────────────────────────────────
+def create_issue(
+    project_key: str,
+    summary: str,
+    issue_type: str = "Task",
+    description: Optional[str] = None,
+    priority_name: Optional[str] = None,
+    labels: Optional[List[str]] = None,
+    parent_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    이슈 생성
+    
+    Args:
+        project_key: 프로젝트 키 (예: "KAN")
+        summary: 이슈 제목
+        issue_type: 이슈 타입 (예: "Task", "Bug", "Subtask")
+        description: 이슈 설명
+        priority_name: 우선순위 (Highest/High/Medium/Low)
+        labels: 라벨 리스트
+        parent_key: 부모 이슈 키 (Subtask용)
+    
+    Returns:
+        {"ok": True, "key": "KAN-123", ...}
+    
+    Raises:
+        requests.HTTPError: API 호출 실패
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/issue"
+    
+    # 기본 필드
+    fields: Dict[str, Any] = {
+        "project": {"key": project_key},
+        "summary": summary,
+        "issuetype": {"name": issue_type}
+    }
+    
+    # 선택 필드
+    if description:
+        fields["description"] = {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": description}]
                 }
-                response_data = self._request("GET", "/rest/api/3/search/jql", params=params)
-                if not isinstance(response_data, dict):
-                    raise JiraClientError(
-                        "Jira 검색 API가 JSON이 아닌 응답을 반환했습니다.",
-                        payload=response_data,
-                    )
-                data = _select_first_search_result(response_data)
-            except JiraClientError:
-                data = None
-            if data is None:
-                if last_error:
-                    raise last_error
-                raise JiraClientError("Jira 검색 요청이 반복적으로 실패했습니다.")
+            ]
+        }
+    
+    if priority_name:
+        fields["priority"] = {"name": priority_name}
+    
+    if labels:
+        fields["labels"] = labels
+    
+    # Subtask: 부모 지정
+    if parent_key:
+        fields["parent"] = {"key": parent_key}
+    
+    body = {"fields": fields}
+    
+    try:
+        resp = SESSION.post(url, headers=HDR_JSON, json=body, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        return {
+            "ok": True,
+            "key": data.get("key"),
+            "id": data.get("id"),
+            "self": data.get("self")
+        }
+    
+    except requests.HTTPError as e:
+        error_msg = e.response.text if e.response else str(e)
+        return {
+            "ok": False,
+            "error": f"HTTP {e.response.status_code}" if e.response else "Unknown",
+            "detail": error_msg
+        }
 
-        issues_payload = data.get("issues", []) if isinstance(data, dict) else []
-        return [self._parse_issue(raw) for raw in issues_payload]
 
-    def create_issue(
-        self,
-        *,
-        project_key: str,
-        project_id: Optional[str] = None,
-        issue_type: str,
-        summary: str,
-        description: Optional[str] = None,
-        use_adf: bool = False,
-        extra_fields: Optional[Dict[str, Any]] = None,
-    ) -> Issue:
-        project_payload: Dict[str, Any]
-        if project_id:
-            project_payload = {"id": project_id}
+# ─────────────────────────────────────────────────────────
+# 이슈 수정
+# ─────────────────────────────────────────────────────────
+def update_issue(
+    issue_key: str,
+    summary: Optional[str] = None,
+    description: Optional[str] = None,
+    issue_type: Optional[str] = None,
+    priority_name: Optional[str] = None,
+    replace_labels: Optional[List[str]] = None,
+    assignee: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    이슈 수정
+
+    Args:
+        issue_key: 이슈 키 (예: "KAN-123")
+        summary: 새 제목
+        description: 새 설명
+        issue_type: 새 이슈 타입
+        priority_name: 새 우선순위
+        replace_labels: 라벨 전체 교체
+        assignee: 담당자 (이메일 또는 이름, "me"는 현재 사용자, None은 할당 해제)
+
+    Returns:
+        {"ok": True, "status": 204}
+
+    Raises:
+        requests.HTTPError: API 호출 실패
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/issue/{issue_key}"
+
+    fields: Dict[str, Any] = {}
+
+    if summary:
+        fields["summary"] = summary
+
+    if description:
+        fields["description"] = {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": description}]
+                }
+            ]
+        }
+
+    if issue_type:
+        fields["issuetype"] = {"name": issue_type}
+
+    if priority_name:
+        fields["priority"] = {"name": priority_name}
+
+    if replace_labels is not None:
+        fields["labels"] = replace_labels
+
+    # 담당자 처리
+    if assignee is not None:
+        if assignee == "" or assignee.lower() == "unassigned":
+            # 할당 해제
+            fields["assignee"] = None
+            print("[담당자] 할당 해제")
+        elif assignee == "me":
+            # 현재 사용자
+            from .config import JIRA_EMAIL
+            user = find_jira_user(JIRA_EMAIL)
+            if user:
+                fields["assignee"] = {"accountId": user["accountId"]}
+                print(f"[담당자] 나에게 할당 → {user['displayName']}")
         else:
-            project_payload = {"key": project_key}
+            # 사용자 검색
+            user = find_jira_user(assignee)
+            if user:
+                fields["assignee"] = {"accountId": user["accountId"]}
+                print(f"[담당자] {assignee} → {user['displayName']} ({user['accountId'][:8]}...)")
+            else:
+                print(f"[경고] 사용자 '{assignee}'를 찾을 수 없습니다.")
 
-        fields: Dict[str, Any] = {
-            "project": project_payload,
-            "issuetype": {"name": normalize_issue_type(issue_type)},
-            "summary": summary,
+    if not fields:
+        return {"ok": True, "status": 204, "noop": True}
+
+    body = {"fields": fields}
+
+    try:
+        resp = SESSION.put(url, headers=HDR_JSON, json=body, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+
+        return {
+            "ok": True,
+            "status": resp.status_code,
+            "key": issue_key
         }
-        if description:
-            fields["description"] = to_adf(description) if use_adf else description
-        if extra_fields:
-            fields.update(extra_fields)
 
-        data = self._request("POST", "/rest/api/3/issue", json={"fields": fields})
-        issue_key = data.get("key") if isinstance(data, dict) else None
-        if not issue_key:
-            raise JiraClientError("Failed to create issue: missing key in response", payload=data)
-        return self.get_issue(issue_key)
+    except requests.HTTPError as e:
+        # 403 에러 특별 처리
+        if e.response and e.response.status_code == 403:
+            return {
+                "ok": False,
+                "error": "Permission Denied",
+                "detail": "이슈 수정 권한이 없습니다. 프로젝트 관리자에게 문의하세요."
+            }
 
-    def update_issue(
-        self,
-        issue_key: str,
-        *,
-        summary: Optional[str] = None,
-        description: Optional[str] = None,
-        due_date: Optional[str] = None,
-        priority: Optional[str] = None,
-        use_adf: bool = False,
-        extra_fields: Optional[Dict[str, Any]] = None,
-    ) -> Issue:
-        fields: Dict[str, Any] = {}
-        if summary is not None:
-            fields["summary"] = summary
-        if description is not None:
-            fields["description"] = to_adf(description) if use_adf else description
-        if due_date is not None:
-            fields["duedate"] = due_date
-        if priority is not None:
-            fields["priority"] = {"name": priority}
-        if extra_fields:
-            fields.update(extra_fields)
-
-        if not fields:
-            raise ValueError("No fields provided for update")
-
-        self._request("PUT", f"/rest/api/3/issue/{issue_key}", json={"fields": fields})
-        return self.get_issue(issue_key)
-
-    def delete_issue(self, issue_key: str) -> None:
-        self._request("DELETE", f"/rest/api/3/issue/{issue_key}")
-
-    def get_create_meta(self, project_key: str) -> Dict[str, Any]:
-        params = {
-            "projectKeys": project_key,
-            "expand": "projects.issuetypes.fields",
+        error_msg = e.response.text if e.response else str(e)
+        return {
+            "ok": False,
+            "error": f"HTTP {e.response.status_code}" if e.response else "Unknown",
+            "detail": error_msg
         }
-        return self._request("GET", "/rest/api/3/issue/createmeta", params=params)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
 
-    def _request(
-        self,
-        method: str,
-        path: str,
-        *,
-        params: Optional[Dict[str, Any]] = None,
-        json: Optional[Dict[str, Any]] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Any:
-        url = f"{self.base_url}{path}"
-        try:
-            response = self.session.request(
-                method,
-                url,
-                params=params,
-                json=json,
-                headers=headers,
-                timeout=self.timeout,
-            )
-        except requests.RequestException as exc:
-            raise JiraClientError(f"Request failed: {exc}") from exc
+# ─────────────────────────────────────────────────────────
+# 이슈 삭제
+# ─────────────────────────────────────────────────────────
+def delete_issue(
+    issue_key: str,
+    delete_subtasks: bool = False
+) -> Dict[str, Any]:
+    """
+    이슈 삭제
 
-        if response.status_code >= 400:
-            message = self._pretty_err(response)
-            raise JiraClientError(message, response.status_code, payload=_safe_json(response))
+    Args:
+        issue_key: 이슈 키 (예: "KAN-123")
+        delete_subtasks: 하위 작업도 함께 삭제 여부
 
-        if not response.content:
+    Returns:
+        {"ok": True, "status": 204}
+
+    Raises:
+        requests.HTTPError: API 호출 실패
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/issue/{issue_key}"
+    params = {"deleteSubtasks": "true" if delete_subtasks else "false"}
+
+    try:
+        resp = SESSION.delete(url, headers=HDR_JSON, params=params, auth=AUTH, timeout=TIMEOUT)
+        resp.raise_for_status()
+
+        return {
+            "ok": True,
+            "status": resp.status_code,
+            "key": issue_key
+        }
+
+    except requests.HTTPError as e:
+        # 403 에러 특별 처리
+        if e.response and e.response.status_code == 403:
+            return {
+                "ok": False,
+                "error": "Permission Denied",
+                "detail": (
+                    "❌ 이슈 삭제 권한이 없습니다.\n\n"
+                    "해결 방법:\n"
+                    "1. Jira 웹 → 프로젝트 설정\n"
+                    "2. 권한 (Permissions) → 역할 (Roles)\n"
+                    "3. 자신의 역할에 '이슈 삭제' 권한 추가\n\n"
+                    "또는 프로젝트 관리자에게 권한을 요청하세요."
+                )
+            }
+
+        # 404 에러 (이슈 없음)
+        if e.response and e.response.status_code == 404:
+            return {
+                "ok": False,
+                "error": "Not Found",
+                "detail": f"❌ 이슈 '{issue_key}'를 찾을 수 없습니다.\n이슈 키를 확인해주세요."
+            }
+
+        error_msg = e.response.text if e.response else str(e)
+        return {
+            "ok": False,
+            "error": f"HTTP {e.response.status_code}" if e.response else "Unknown",
+            "detail": error_msg
+        }
+
+
+# ─────────────────────────────────────────────────────────
+# 헬퍼: 이슈 타입 ID 조회
+# ─────────────────────────────────────────────────────────
+def get_issue_type_id(type_name: str) -> Optional[str]:
+    """
+    이슈 타입 이름 → ID 변환
+
+    Args:
+        type_name: 이슈 타입 이름 (예: "Task")
+
+    Returns:
+        타입 ID 또는 None
+    """
+    types = list_issue_types(100)
+
+    for t in types:
+        if t.get("name", "").lower() == type_name.lower():
+            return t.get("id")
+
+    return None
+
+
+# ─────────────────────────────────────────────────────────
+# 헬퍼: 사용자 검색 및 라벨 조회
+# ─────────────────────────────────────────────────────────
+def find_jira_user(name_or_email: str) -> Optional[Dict[str, Any]]:
+    """
+    Jira 사용자 검색
+
+    Args:
+        name_or_email: 사용자 이름 또는 이메일
+
+    Returns:
+        {"accountId": "...", "displayName": "...", "emailAddress": "..."}
+        또는 None
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/user/search"
+    params = {"query": name_or_email}
+
+    try:
+        resp = SESSION.get(url, headers=HDR_JSON, params=params, auth=AUTH, timeout=10)
+        resp.raise_for_status()
+        users = resp.json()
+
+        if users:
+            # 첫 번째 매칭 사용자 반환
+            return users[0]
+        else:
             return None
 
-        content_type = response.headers.get("Content-Type", "")
-        if "json" in content_type:
-            return response.json()
-        return response.text
-
-    def _build_search_jql(self, project_key: Optional[str], keyword: Optional[str], jql: Optional[str]) -> str:
-        clauses: List[str] = []
-        if project_key:
-            clauses.append(f'project = "{project_key}"')
-        if keyword:
-            safe = keyword.replace("\"", "\\\"")
-            clauses.append(f'(summary ~ "{safe}" OR description ~ "{safe}")')
-        if jql:
-            clauses.append(f"({jql})")
-
-        query = " AND ".join(clauses)
-        order = "ORDER BY updated DESC"
-        return f"{query} {order}".strip() if query else order
-
-    def _parse_issue(self, raw_issue: Dict[str, Any]) -> Issue:
-        fields = raw_issue.get("fields", {}) if isinstance(raw_issue, dict) else {}
-        description = fields.get("description")
-        if isinstance(description, dict):
-            description_text = adf_to_text(description)
-        else:
-            description_text = description
-
-        status = self._safe_get(fields, "status", "name")
-        priority = self._safe_get(fields, "priority", "name")
-        assignee = self._safe_get(fields, "assignee", "displayName")
-        project = self._safe_get(fields, "project", "key")
-        issue_type = self._safe_get(fields, "issuetype", "name")
-
-        return Issue(
-            key=raw_issue.get("key"),
-            summary=fields.get("summary"),
-            description=description_text,
-            status=status,
-            priority=priority,
-            due_date=fields.get("duedate"),
-            assignee=assignee,
-            project=project,
-            issue_type=issue_type,
-            raw=raw_issue,
-        )
-
-    @staticmethod
-    def _safe_get(obj: Dict[str, Any], *path: str) -> Optional[str]:
-        cur: Any = obj
-        for key in path:
-            if not isinstance(cur, dict) or key not in cur:
-                return None
-            cur = cur[key]
-        if isinstance(cur, str) or cur is None:
-            return cur
-        return str(cur)
-
-    @staticmethod
-    def _pretty_err(response: requests.Response) -> str:
-        payload = _safe_json(response)
-        if isinstance(payload, dict):
-            messages: List[str] = []
-            errors = payload.get("errorMessages")
-            if isinstance(errors, Iterable):
-                messages.extend(str(item) for item in errors)
-            field_errors = payload.get("errors")
-            if isinstance(field_errors, dict):
-                messages.extend(f"{field}: {msg}" for field, msg in field_errors.items())
-            if messages:
-                joined = "; ".join(messages)
-                return f"{response.status_code}: {joined}"
-        text = response.text.strip()
-        if text:
-            return f"{response.status_code}: {text}"
-        return f"{response.status_code}: {response.reason}"
-
-
-# ----------------------------------------------------------------------
-# ADF helpers
-
-
-def _select_first_search_result(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize Jira search responses across legacy/new API shapes."""
-    if not isinstance(payload, dict):
-        return {}
-
-    if "issues" in payload and isinstance(payload["issues"], list):
-        return payload
-
-    results = payload.get("results")
-    if isinstance(results, list):
-        for item in results:
-            if isinstance(item, dict) and "issues" in item:
-                return item
-
-    values = payload.get("queries") or payload.get("jqlResults")
-    if isinstance(values, list):
-        for item in values:
-            if isinstance(item, dict) and "issues" in item:
-                return item
-
-    return payload
-
-
-def to_adf(text: str) -> Dict[str, Any]:
-    """Convert plain text into a simple Atlassian Document Format payload."""
-    paragraphs = text.splitlines()
-    content: List[Dict[str, Any]] = []
-    for line in paragraphs:
-        if not line:
-            content.append({"type": "paragraph", "content": []})
-            continue
-        content.append(
-            {
-                "type": "paragraph",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": line,
-                    }
-                ],
-            }
-        )
-    if not content:
-        content.append({"type": "paragraph", "content": []})
-    return {"version": 1, "type": "doc", "content": content}
-
-
-def adf_to_text(adf: Any) -> Optional[str]:
-    """Convert a subset of ADF back to text for CLI rendering."""
-    if not isinstance(adf, dict):
-        return None
-    if adf.get("type") != "doc":
+    except Exception as e:
+        print(f"[오류] 사용자 검색 실패: {e}")
         return None
 
-    lines: List[str] = []
 
-    def handle_nodes(nodes: Iterable[Dict[str, Any]], prefix: str = "") -> None:
-        for node in nodes:
-            node_type = node.get("type")
-            if node_type == "paragraph":
-                lines.append(prefix + _inline_text(node.get("content", [])))
-            elif node_type == "bulletList":
-                for item in node.get("content", []):
-                    if not isinstance(item, dict):
-                        continue
-                    lines.append(prefix + "- " + _inline_text(item.get("content", [])))
-                    sub = item.get("content", [])
-                    handle_nodes([sub_node for sub_node in sub if isinstance(sub_node, dict)], prefix + "  ")
-            elif node_type == "orderedList":
-                index = 1
-                for item in node.get("content", []):
-                    if not isinstance(item, dict):
-                        continue
-                    lines.append(prefix + f"{index}. " + _inline_text(item.get("content", [])))
-                    index += 1
-            elif node_type == "heading":
-                lines.append(prefix + _inline_text(node.get("content", [])))
+def get_issue_labels(issue_key: str) -> List[str]:
+    """
+    이슈의 기존 라벨 조회
 
-    def _inline_text(items: Iterable[Dict[str, Any]]) -> str:
-        buffer: List[str] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            itype = item.get("type")
-            if itype == "text":
-                buffer.append(str(item.get("text", "")))
-            elif itype == "hardBreak":
-                buffer.append("\n")
-        return "".join(buffer).strip()
+    Args:
+        issue_key: 이슈 키 (예: "KAN-123")
 
-    handle_nodes(adf.get("content", []))
-    return "\n".join(line for line in lines if line is not None)
+    Returns:
+        라벨 리스트 (예: ["bug", "api"])
+    """
+    url = f"{JIRA_BASE_URL}/rest/api/3/issue/{issue_key}"
+    params = {"fields": "labels"}
 
-
-def normalize_issue_type(issue_type: str) -> str:
-    if not issue_type:
-        raise ValueError("issue_type is required")
-    normalized = issue_type.strip()
-    return KOREAN_ISSUE_TYPE_MAP.get(normalized, normalized)
-
-
-def _safe_json(response: requests.Response) -> Any:
     try:
-        return response.json()
-    except ValueError:
-        return None
+        resp = SESSION.get(url, headers=HDR_JSON, params=params, auth=AUTH, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("fields", {}).get("labels", [])
+
+    except Exception as e:
+        print(f"[오류] 라벨 조회 실패 ({issue_key}): {e}")
+        return []
