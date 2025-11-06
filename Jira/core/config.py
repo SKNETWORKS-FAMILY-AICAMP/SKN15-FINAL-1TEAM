@@ -64,6 +64,12 @@ MILVUS_PORT: int = int(os.getenv("MILVUS_PORT", "19530"))
 MILVUS_COLLECTION: str = (os.getenv("MILVUS_COLLECTION") or "jira_issues").strip()
 
 # ─────────────────────────────────────────────────────────
+# Webhook 설정
+# ─────────────────────────────────────────────────────────
+WEBHOOK_URL: str = (os.getenv("WEBHOOK_URL") or "").strip()
+WEBHOOK_AUTO_REGISTER: bool = os.getenv("WEBHOOK_AUTO_REGISTER", "false").lower() == "true"
+
+# ─────────────────────────────────────────────────────────
 # 공용 객체
 # ─────────────────────────────────────────────────────────
 SESSION = requests.Session()

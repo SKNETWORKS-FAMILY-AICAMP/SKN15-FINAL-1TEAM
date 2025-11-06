@@ -1,0 +1,22 @@
+# FastAPI & Server
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.10.3
+
+# LangGraph & LangChain
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# OpenAI
+openai>=1.0.0
+
+# Jira
+atlassian-python-api>=3.41.0
+
+# Milvus
+pymilvus>=2.3.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0

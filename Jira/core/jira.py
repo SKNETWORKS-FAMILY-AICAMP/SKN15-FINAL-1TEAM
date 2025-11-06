@@ -234,6 +234,65 @@ class JiraClient:
             print(f"[Jira] 전체 이슈 타입 조회 오류: {e}")
             return ["Task", "Bug", "Story"]
 
+    def register_webhook(self, webhook_url: str, webhook_name: str = "Jira Agent Webhook") -> bool:
+        """
+        Jira 웹훅 자동 등록
+
+        Args:
+            webhook_url: 웹훅 URL (예: http://server:8000/webhook/jira)
+            webhook_name: 웹훅 이름
+
+        Returns:
+            성공 여부
+        """
+        url = f"{self.base_url}rest/webhooks/1.0/webhook"
+
+        # 기존 웹훅 확인
+        try:
+            response = requests.get(url, auth=self.auth, timeout=10)
+            response.raise_for_status()
+            existing_webhooks = response.json()
+
+            # 동일한 URL의 웹훅이 이미 있는지 확인
+            for webhook in existing_webhooks:
+                if webhook.get("url") == webhook_url:
+                    print(f"[Jira Webhook] 이미 등록되어 있음: {webhook_url}")
+                    return True
+
+        except requests.RequestException as e:
+            print(f"[Jira Webhook] 기존 웹훅 조회 실패: {e}")
+
+        # 웹훅 등록
+        payload = {
+            "name": webhook_name,
+            "url": webhook_url,
+            "events": [
+                "jira:issue_created",
+                "jira:issue_updated",
+                "jira:issue_deleted"
+            ],
+            "excludeBody": False
+        }
+
+        try:
+            response = requests.post(
+                url,
+                auth=self.auth,
+                json=payload,
+                headers=self.headers,
+                timeout=10
+            )
+            response.raise_for_status()
+
+            print(f"✅ [Jira Webhook] 웹훅 등록 성공: {webhook_url}")
+            return True
+
+        except requests.RequestException as e:
+            print(f"❌ [Jira Webhook] 웹훅 등록 실패: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"   응답: {e.response.text}")
+            return False
+
 
 # 전역 인스턴스
 jira_client = JiraClient()

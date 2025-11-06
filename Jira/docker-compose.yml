@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # Jira Agent API
+  jira-agent:
+    container_name: jira-agent-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MILVUS_HOST=host.docker.internal  # 호스트의 Milvus에 연결
+      - MILVUS_PORT=19530
+    env_file:
+      - .env
+    restart: unless-stopped
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Docker에서 호스트 접근
+
+networks:
+  default:
+    name: jira-agent-network

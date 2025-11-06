@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.agent_v2 import jira_agent
 from core.jira import jira_client
 from core.milvus_client import milvus_client
+from core.config import WEBHOOK_URL, WEBHOOK_AUTO_REGISTER
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -33,6 +34,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ─────────────────────────────────────────────────────────
+# Startup Event: 웹훅 자동 등록
+# ─────────────────────────────────────────────────────────
+
+@app.on_event("startup")
+async def startup_event():
+    """서버 시작 시 실행되는 이벤트"""
+    print("=" * 60)
+    print("  Jira Agent 서버 시작 중...")
+    print("=" * 60)
+
+    # 웹훅 자동 등록
+    if WEBHOOK_AUTO_REGISTER and WEBHOOK_URL:
+        print(f"\n[Webhook] 자동 등록 시작: {WEBHOOK_URL}")
+        success = jira_client.register_webhook(WEBHOOK_URL)
+
+        if success:
+            print("[Webhook] ✅ 웹훅 등록 완료")
+        else:
+            print("[Webhook] ⚠️  웹훅 등록 실패 (수동으로 등록 필요)")
+    else:
+        if not WEBHOOK_AUTO_REGISTER:
+            print("[Webhook] 자동 등록이 비활성화되어 있습니다.")
+        if not WEBHOOK_URL:
+            print("[Webhook] WEBHOOK_URL이 설정되지 않았습니다.")
+
+    print("=" * 60)
+    print("  ✅ 서버 시작 완료")
+    print("=" * 60)
 
 
 # ─────────────────────────────────────────────────────────
