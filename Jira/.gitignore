@@ -1,0 +1,39 @@
+# Environment variables
+.env
+
+# Logs
+*.log
+server.log
+
+# Test files
+tests/
+test_*.py
+
+# Documentation
+docs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+*.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db

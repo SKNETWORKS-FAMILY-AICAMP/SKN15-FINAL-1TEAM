@@ -16,12 +16,14 @@ config.py - 환경설정
 
 import os
 from typing import Optional
+from pathlib import Path
 from dotenv import load_dotenv
 from requests.auth import HTTPBasicAuth
 import requests
 
-# .env 로드
-load_dotenv()
+# .env 로드 (Jira 디렉토리의 .env 파일)
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # ─────────────────────────────────────────────────────────
 # 유틸
