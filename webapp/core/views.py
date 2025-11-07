@@ -2,6 +2,7 @@
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.utils.encoding import escape_uri_path
+from django.urls import reverse
 
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -10,9 +11,15 @@ from django.utils import timezone
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.models import User
+from django.db.models import Q
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from PyPDF2 import PdfReader
 import io, csv, time
+
+from .models import IntegrationSettings
 
 
 # -------------------------------------------------------------------
@@ -55,6 +62,102 @@ def download_page(request):
 def calendar_page(request):
     # 간단한 플레이스홀더 페이지
     return render(request, "calendar.html")
+
+
+# -------------------------------------------------------------------
+# 사용자 관리 페이지
+# -------------------------------------------------------------------
+@login_required
+def user_management(request):
+    query = (request.GET.get("q") or "").strip()
+    users_qs = User.objects.order_by("-date_joined")
+    if query:
+        users_qs = users_qs.filter(
+            Q(username__icontains=query) | Q(email__icontains=query)
+        )
+    users = list(users_qs)
+    integration_settings = IntegrationSettings.load()
+    invite_error_code = request.GET.get("invite_error") or ""
+    invite_error_messages = {
+        "missing_email": "이메일을 입력해 주세요.",
+        "invalid_email": "유효한 이메일 주소를 입력해 주세요.",
+    }
+    return render(request, "user_management.html", {
+        "users": users,
+        "total_users": len(users),
+        "settings": integration_settings,
+        "integrations_saved": request.GET.get("saved") == "1",
+        "invite_sent": request.GET.get("invite") == "1",
+        "invite_error_code": invite_error_code,
+        "invite_error_message": invite_error_messages.get(invite_error_code, ""),
+        "search_query": query,
+    })
+
+
+@login_required
+def admin_integrations_update(request):
+    if request.method != "POST":
+        return redirect("user_management")
+
+    settings_obj = IntegrationSettings.load()
+
+    def cleaned(name):
+        return (request.POST.get(name) or "").strip()
+
+    settings_obj.jira_key = cleaned("jira_key")
+    settings_obj.jira_email = cleaned("jira_email")
+    settings_obj.jira_url = cleaned("jira_url")
+    settings_obj.google_token = cleaned("google_token")
+    settings_obj.openai_token = cleaned("openai_token")
+    settings_obj.save()
+
+    return redirect(f"{reverse('user_management')}?saved=1")
+
+
+@login_required
+def admin_invite(request):
+    if request.method != "POST":
+        return redirect("user_management")
+
+    email = (request.POST.get("email") or "").strip().lower()
+    role = (request.POST.get("role") or "member").strip().lower()
+
+    if not email:
+        return redirect(f"{reverse('user_management')}?invite_error=missing_email")
+    try:
+        validate_email(email)
+    except ValidationError:
+        return redirect(f"{reverse('user_management')}?invite_error=invalid_email")
+
+    username_base = email.split("@")[0] if "@" in email else email
+    username = username_base
+    suffix = 1
+    while not username:
+        username = f"user{timezone.now().strftime('%Y%m%d%H%M%S')}"
+
+    while User.objects.filter(username=username).exclude(email=email).exists():
+        suffix += 1
+        username = f"{username_base}{suffix}"
+
+    user, created = User.objects.get_or_create(
+        email=email,
+        defaults={
+            "username": username,
+            "is_staff": role == "admin",
+            "is_superuser": False,
+        },
+    )
+
+    if not created:
+        # Update role if existing user
+        is_admin = role == "admin"
+        user.is_staff = is_admin
+        if not is_admin:
+            user.is_superuser = False
+        user.save(update_fields=["is_staff", "is_superuser"])
+
+    # TODO: 이메일 전송 로직은 추후 연결
+    return redirect(f"{reverse('user_management')}?invite=1")
 
 
 # -------------------------------------------------------------------

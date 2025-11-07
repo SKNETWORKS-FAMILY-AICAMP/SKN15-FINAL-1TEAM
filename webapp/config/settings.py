@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-_qc5rn=8#8n9$3(+k&p0z839rjuv1_0#wl=%@%g@fu3)v0!x-h'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["3.39.112.177", "localhost"]
 
 
 # Application definition
@@ -153,3 +153,9 @@ LOGIN_URL = "/signup/"          # ✅ 미로그인 접근 시 회원가입 페�
 LOGIN_REDIRECT_URL = "/"        # 로그인/회원가입 성공 후 돌아갈 곳
 LOGOUT_REDIRECT_URL = "/"       # 로그아웃 후 돌아갈 곳
 
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://3.39.112.177",
+    "https://3.39.112.177",        # 나중에 HTTPS 쓰면 필요
+]

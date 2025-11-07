@@ -19,6 +19,9 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("calendar/", views.calendar_page, name="calendar"),  # ✅ 로그인 필요 (view에서 보호)
+    path("users/", views.user_management, name="user_management"),
+    path("admin/integrations/update/", views.admin_integrations_update, name="admin_integrations_update"),
+    path("admin/invite/", views.admin_invite, name="admin_invite"),
     
     # 예시 다운로드 API (그대로)
     path("api/download-file/", views.download_file_api, name="download_file_api"),

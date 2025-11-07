@@ -8,17 +8,27 @@
 
   <!-- 공통 스타일 -->
   <link rel="stylesheet" href="{% static 'css/base.css' %}">
+  <!-- SB: sidebar styles -->
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
 
   <!-- 페이지별로 추가 CSS/JS(예: FullCalendar) 주입 -->
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="with-sidebar sb-body" data-sb-root>
 
   <!-- 상단 네비게이션 -->
   <header class="topbar">
     <div class="container" style="display:flex; align-items:center; gap:16px; justify-content:space-between;">
       <!-- 왼쪽 로고/브랜드 -->
-      <a href="/" class="brand" style="font-weight:800; letter-spacing:-.02em;">TEAM HINTON</a>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <!-- SB: sidebar toggle button -->
+        <button type="button" class="sb-toggle" data-sb-toggle aria-controls="sb-sidebar" aria-expanded="false" aria-label="사이드바 토글">
+          <span class="sb-toggle__bar"></span>
+          <span class="sb-toggle__bar"></span>
+          <span class="sb-toggle__bar"></span>
+        </button>
+        <a href="/" class="brand" style="font-weight:800; letter-spacing:-.02em;">TEAM HINTON</a>
+      </div>
 
       <!-- 가운데 메뉴 -->
       <nav class="nav" style="display:flex; gap:14px; align-items:center;">
@@ -41,10 +51,50 @@
     </div>
   </header>
 
-  <!-- 메인 콘텐츠 -->
-  <main class="container">
-    {% block content %}{% endblock %}
+  {% with request.resolver_match.url_name as current %}
+  <!-- SB: sidebar layout start -->
+  <main class="sb-layout" data-sb-layout>
+    <aside
+      class="sb-sidebar"
+      id="sb-sidebar"
+      data-sb-sidebar
+      role="complementary"
+      aria-hidden="true"
+      tabindex="-1"
+    >
+      <div class="sb-sidebar__inner" data-sb-focus-container tabindex="-1">
+        <p class="sb-sidebar__title">빠른 이동</p>
+        {% if request.user.is_authenticated %}
+          <p class="sb-sidebar__subtitle">안녕하세요, <strong>{{ request.user.username }}</strong>님</p>
+        {% else %}
+          <p class="sb-sidebar__subtitle">로그인하고 모든 기능을 이용해 보세요.</p>
+        {% endif %}
+        <nav class="sb-nav" aria-label="사이드바 빠른 이동">
+          <a class="sb-nav__link{% if current == 'home' %} is-active{% endif %}" href="{% url 'home' %}" data-sb-focus-initial>메인</a>
+          {% if request.user.is_authenticated %}
+            <a class="sb-nav__link{% if current == 'logout' %} is-active{% endif %}" href="{% url 'logout' %}">로그아웃</a>
+          {% else %}
+            <a class="sb-nav__link{% if current == 'login' %} is-active{% endif %}" href="{% url 'login' %}">로그인</a>
+            <a class="sb-nav__link{% if current == 'signup' %} is-active{% endif %}" href="{% url 'signup' %}">회원가입</a>
+          {% endif %}
+          <a class="sb-nav__link{% if current == 'download' %} is-active{% endif %}" href="{% url 'download' %}">다운로드</a>
+          <a class="sb-nav__link{% if current == 'calendar' %} is-active{% endif %}" href="{% url 'calendar' %}">캘린더</a>
+          <a class="sb-nav__link{% if current == 'test' %} is-active{% endif %}" href="{% url 'test' %}">PDF TEST</a>
+          <a class="sb-nav__link{% if current == 'user_management' %} is-active{% endif %}" href="{% url 'user_management' %}">사용자 관리</a>
+        </nav>
+      </div>
+    </aside>
+
+    <div class="sb-overlay" data-sb-overlay hidden></div>
+
+    <section class="app-main sb-main" data-sb-main>
+      <div class="container">
+        {% block content %}{% endblock %}
+      </div>
+    </section>
   </main>
+  <!-- SB: sidebar layout end -->
+  {% endwith %}
 
   <!-- 푸터 -->
   <footer class="footer">
@@ -53,6 +103,8 @@
 
   <!-- 공통 스크립트 -->
   <script src="{% static 'js/app.js' %}"></script>
+  <!-- SB: sidebar script -->
+  <script src="{% static 'js/site.js' %}"></script>
 
   <!-- 페이지별 스크립트 -->
   {% block scripts %}{% endblock %}

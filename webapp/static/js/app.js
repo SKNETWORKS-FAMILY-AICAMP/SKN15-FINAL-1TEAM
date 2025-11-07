@@ -1,1 +1,1 @@
-console.log("App JS loaded");
+// SB: legacy placeholder – project specific scripts can go here.

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}사용자 관리 — Team Hinton{% endblock %}
+
+{% block content %}
+<section class="mg-hero">
+  <div class="mg-hero__text">
+    <p class="eyebrow">관리 콘솔</p>
+    <h1 class="headline">사용자 관리 &amp; 연동 설정</h1>
+    <p class="subhead">조직 내 계정 현황과 외부 서비스 키를 한 화면에서 관리합니다.</p>
+  </div>
+  <div class="mg-hero__actions">
+    <a href="{% url 'home' %}" class="btn ghost">메인으로</a>
+    <button type="button" class="btn primary" data-hook="open-invite-modal">사용자 초대</button>
+  </div>
+</section>
+
+{% if integrations_saved or invite_sent or invite_error_message %}
+<section class="mg-flash-wrap">
+  {% if integrations_saved %}
+  <p class="mg-flash mg-flash--success">연동 설정이 저장되었습니다.</p>
+  {% endif %}
+  {% if invite_sent %}
+  <p class="mg-flash mg-flash--info">초대 메일을 발송했습니다.</p>
+  {% endif %}
+  {% if invite_error_message %}
+  <p class="mg-flash mg-flash--error">{{ invite_error_message }}</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="mg-stack">
+  <article class="card mg-card mg-card--users">
+    <header class="mg-card__head">
+      <div>
+        <h2 class="mg-card__title">사용자 목록</h2>
+        <p class="mg-card__meta">총 {{ total_users }}명 등록</p>
+        {% if search_query %}
+        <p class="mg-card__meta">검색어: "{{ search_query }}"</p>
+        {% endif %}
+      </div>
+      <div class="mg-toolbar">
+        <form method="get" class="mg-search">
+          <input type="text" name="q" value="{{ search_query }}" placeholder="아이디 또는 이메일 검색" aria-label="사용자 검색">
+          <button type="submit" class="btn ghost">검색</button>
+        </form>
+        {% if search_query %}
+        <a href="{% url 'user_management' %}" class="btn ghost">초기화</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <div class="mg-table-wrap">
+      <table class="mg-table">
+        <thead>
+          <tr>
+            <th scope="col">아이디</th>
+            <th scope="col">이메일</th>
+            <th scope="col">가입일</th>
+            <th scope="col">상태</th>
+            <th scope="col">권한</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.email|default:"-" }}</td>
+            <td>{{ user.date_joined|date:"Y-m-d H:i" }}</td>
+            <td>
+              {% if user.is_active %}
+              <span class="mg-badge mg-badge--active">활성</span>
+              {% else %}
+              <span class="mg-badge mg-badge--inactive">비활성</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if user.is_staff or user.is_superuser %}
+              <span class="mg-badge mg-badge--admin">관리자</span>
+              {% else %}
+              <span class="mg-badge mg-badge--member">일반</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="mg-empty">아직 등록된 사용자가 없습니다.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <section class="card mg-card mg-section mg-section--integrations">
+    <header>
+      <h2 class="mg-section-title">시스템 연동 설정</h2>
+      <p class="mg-section-desc">각 연동 항목을 순서대로 입력하고 저장하세요.</p>
+    </header>
+
+    <form method="post" action="{% url 'admin_integrations_update' %}">
+      {% csrf_token %}
+
+      <ul class="mg-integration-list">
+        <li class="mg-integration-item">
+          <div class="mg-integration-head">
+            <h3 class="mg-integration-title">Jira</h3>
+            <p class="mg-integration-desc">액세스 키, 관리자 이메일, 사이트 주소를 입력하세요.</p>
+          </div>
+          <div class="mg-integration-fields">
+            <label class="mg-field">
+              <span>Jira Key</span>
+              <input id="jira_key" name="jira_key" type="text" value="{{ settings.jira_key|default_if_none:'' }}" placeholder="프로젝트 액세스 키" required>
+            </label>
+            <label class="mg-field">
+              <span>Jira 이메일</span>
+              <input id="jira_email" name="jira_email" type="email" value="{{ settings.jira_email|default_if_none:'' }}" placeholder="admin@company.com" required>
+            </label>
+            <label class="mg-field">
+              <span>Jira 사이트 주소</span>
+              <input id="jira_url" name="jira_url" type="url" value="{{ settings.jira_url|default_if_none:'' }}" placeholder="https://jira.company.com" required>
+            </label>
+          </div>
+        </li>
+
+        <li class="mg-integration-item">
+          <div class="mg-integration-head">
+            <h3 class="mg-integration-title">Google</h3>
+            <p class="mg-integration-desc">OAuth 토큰을 안전한 위치에서 복사해 붙여넣으세요.</p>
+          </div>
+          <div class="mg-integration-fields">
+            <label class="mg-field">
+              <span>Google Token</span>
+              <input id="google_token" name="google_token" type="text" value="{{ settings.google_token|default_if_none:'' }}" placeholder="OAuth 토큰 값을 입력하세요">
+            </label>
+          </div>
+        </li>
+
+        <li class="mg-integration-item">
+          <div class="mg-integration-head">
+            <h3 class="mg-integration-title">OpenAI</h3>
+            <p class="mg-integration-desc">API 사용을 위해 발급받은 키를 입력합니다.</p>
+          </div>
+          <div class="mg-integration-fields">
+            <label class="mg-field">
+              <span>OpenAI Token</span>
+              <input id="openai_token" name="openai_token" type="text" value="{{ settings.openai_token|default_if_none:'' }}" placeholder="sk-...">
+            </label>
+          </div>
+        </li>
+      </ul>
+
+      <div class="mg-actions mg-actions--stack">
+        <button type="submit" class="btn primary">연동 정보 저장</button>
+      </div>
+    </form>
+
+    <p class="mg-note">연동 정보는 개발 환경 데이터베이스에 그대로 저장됩니다. 운영 배포 전에는 별도 비밀 저장소(예: AWS Secrets Manager)를 연결하세요.</p>
+  </section>
+</section>
+
+<!-- 사용자 초대 모달 -->
+<div id="inviteModal" class="mg-modal" role="dialog" aria-modal="true" aria-labelledby="inviteModalTitle" aria-hidden="true">
+  <div class="mg-modal__overlay" data-hook="close-invite-modal"></div>
+  <div class="mg-modal__panel card">
+    <div class="mg-modal__header">
+      <h3 id="inviteModalTitle" class="mg-modal__title">사용자 초대</h3>
+      <button type="button" class="mg-modal__close" data-hook="close-invite-modal" aria-label="닫기">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.18 12 2.89 5.71 4.3 4.29l6.29 6.3 6.29-6.3z"/>
+        </svg>
+      </button>
+    </div>
+    <form method="post" action="{% url 'admin_invite' %}" class="mg-invite-form">
+      {% csrf_token %}
+      <div class="mg-field">
+        <label for="invite_email">이메일</label>
+        <input id="invite_email" name="email" type="email" placeholder="user@company.com" required>
+      </div>
+      <div class="mg-field">
+        <label for="invite_role">권한</label>
+        <select id="invite_role" name="role">
+          <option value="member">일반</option>
+          <option value="admin">관리자</option>
+        </select>
+      </div>
+      <div class="mg-modal__actions">
+        <button type="button" class="btn ghost" data-hook="close-invite-modal">취소</button>
+        <button type="submit" class="btn primary">초대 보내기</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const modal = document.getElementById("inviteModal");
+    if (!modal) return;
+    const openers = document.querySelectorAll('[data-hook="open-invite-modal"]');
+    const closers = document.querySelectorAll('[data-hook="close-invite-modal"]');
+
+    const open = () => {
+      modal.classList.add("is-open");
+      modal.removeAttribute("aria-hidden");
+      const emailField = document.getElementById("invite_email");
+      if (emailField) {
+        setTimeout(() => emailField.focus(), 80);
+      }
+    };
+
+    const close = () => {
+      modal.classList.remove("is-open");
+      modal.setAttribute("aria-hidden", "true");
+    };
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 openers.forEach(btn => btn.addEventListener("click", open));
+    closers.forEach(btn => btn.addEventListener("click", close));
+    modal.addEventListener("click", (evt) => {
+      if (evt.target === modal) {
+        close();
+      }
+    });
+    document.addEventListener("keydown", (evt) => {
+      if (evt.key === "Escape" && modal.classList.contains("is-open")) {
+        close();
+      }
+    });
+  })();
+</script>
+{% endblock %}
