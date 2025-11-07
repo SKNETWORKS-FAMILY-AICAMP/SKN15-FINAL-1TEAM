@@ -1,0 +1,29 @@
+# Django Framework
+Django==5.2.6
+
+# WSGI Server for Production
+gunicorn==23.0.0
+
+# PDF Processing
+PyPDF2==3.0.1
+
+# Database Drivers (choose based on your database)
+# PostgreSQL
+psycopg==3.2.10
+psycopg-pool==3.2.6
+psycopg2-binary==2.9.10
+
+# MySQL
+mysqlclient==2.2.7
+
+# Redis (if using cache or sessions)
+redis==6.2.0
+
+# Environment Variables
+python-dotenv==1.1.1
+
+# HTTP Requests
+requests==2.32.3
+
+# Optional: Static file serving in production
+# whitenoise==6.8.2
